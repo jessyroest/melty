@@ -1,39 +1,47 @@
-import { type ErrorCode, OWNER_RE, TTL_OPTIONS } from "./protocol";
-import { REJECT_HEADER } from "./ws";
+import { parseOffer } from "./offer";
+import { type ErrorCode, WS_PATH } from "./protocol";
+import { CREATE_HEADER, INTERNAL_PREFIX, OWNER_HEADER, REJECT_HEADER } from "./ws";
 
 export { Limiter } from "./limiter";
 export { Room } from "./room";
 
-const ROUTE = /^\/rooms\/([A-Za-z0-9_-]{43})\/ws$/;
 const LIMITER_SHARDS = 16;
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
-    const match = ROUTE.exec(url.pathname);
-    if (!match) return plain(404);
+    if (url.pathname !== WS_PATH) return plain(404);
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return plain(426);
     if (!originAllowed(request.headers.get("Origin"), env.ALLOWED_ORIGINS)) return plain(403);
+    // nothing about a room may travel in the URL
+    if (url.search !== "") return plain(400);
 
-    const room = env.ROOM.get(env.ROOM.idFromName(match[1]!));
-    // the reject header is ours alone; never pass one through from the client
-    const headers = new Headers(request.headers);
-    headers.delete(REJECT_HEADER);
+    const offer = parseOffer(request.headers.get("Sec-WebSocket-Protocol"));
+    // no room to answer through, or not our client: a plain refusal
+    if (!offer) return plain(400);
+
+    const room = env.ROOM.get(env.ROOM.idFromName(offer.roomId));
+    // internal headers are ours alone; never pass one through from the client
+    const headers = new Headers();
+    for (const [k, v] of request.headers) {
+      if (!k.toLowerCase().startsWith(INTERNAL_PREFIX) && k.toLowerCase() !== "sec-websocket-protocol") headers.set(k, v);
+    }
+    const forward = () => room.fetch(new Request(request, { headers }));
     const refuse = (code: ErrorCode) => {
       headers.set(REJECT_HEADER, code);
-      return room.fetch(new Request(request, { headers }));
+      return forward();
     };
 
-    const owner = url.searchParams.get("owner");
-    if (owner !== null && !OWNER_RE.test(owner)) return refuse("bad");
+    // every attempt counts, before the room is touched
+    const ip = request.headers.get("CF-Connecting-IP") ?? "";
+    const creating = offer.ok && offer.create !== undefined;
+    const verdict = await limiterFor(env, ip).then((l) => l.admit(ip, creating));
+    if (verdict !== "ok") return refuse(verdict);
+    if (!offer.ok) return refuse("bad");
 
-    const create = url.searchParams.get("create");
-    if (create !== null) {
-      if (!(TTL_OPTIONS as readonly number[]).includes(Number(create))) return refuse("bad");
-      const ip = request.headers.get("CF-Connecting-IP") ?? "";
-      if (!(await limiterFor(env, ip).then((l) => l.hit(ip)))) return refuse("limit");
-    }
-    return room.fetch(new Request(request, { headers }));
+    if (offer.create !== undefined) headers.set(CREATE_HEADER, String(offer.create));
+    if (offer.owner !== undefined) headers.set(OWNER_HEADER, offer.owner);
+    return forward();
   },
 } satisfies ExportedHandler<Env>;
 

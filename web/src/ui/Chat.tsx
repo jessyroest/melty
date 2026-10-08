@@ -52,6 +52,28 @@ function Room({ view, session }: { view: View; session: SessionApi }) {
     };
   }, []);
 
+  // iOS Safari ignores interactive-widget=resizes-content: the keyboard covers the layout instead
+  // of shrinking it. size the room to the visible area so the composer sits right above the keys.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const root = document.documentElement;
+    const fit = () => {
+      if (innerHeight - vv.height > 80) {
+        root.style.setProperty("--room-h", `${Math.round(vv.height)}px`);
+        if (scrollY !== 0) scrollTo(0, 0);
+      } else {
+        root.style.removeProperty("--room-h");
+      }
+    };
+    fit();
+    vv.addEventListener("resize", fit);
+    return () => {
+      vv.removeEventListener("resize", fit);
+      root.style.removeProperty("--room-h");
+    };
+  }, []);
+
   // the creator gets the invite sheet once, right away
   const shownOnce = useRef(false);
   useEffect(() => {

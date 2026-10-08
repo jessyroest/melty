@@ -45,6 +45,8 @@
 /* the room is exactly one screen tall; only the message log scrolls */
 .app--room {
   height: 100dvh;
+  /* set from visualViewport while the iOS keyboard is open (Chat.tsx) */
+  height: var(--room-h, 100dvh);
   min-height: 0;
 }
 .app--room main {
@@ -471,6 +473,11 @@
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
 }
+/* the log scrolls; its rows never get squeezed (some clip their own overflow, so their
+   automatic minimum height would be 0) */
+.messages > * {
+  flex-shrink: 0;
+}
 /* few messages sit at the bottom, like any chat */
 .messages > :first-child {
   margin-top: auto;
@@ -816,6 +823,9 @@
 }
 .composer__input::placeholder {
   color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* the whole field shows the focus ring instead */
 .composer__input:focus-visible {
@@ -2014,4 +2024,335 @@
   to {
     opacity: 0;
   }
+}
+
+/* ---- mobile pass: user text, touch targets, sheets, small and short screens ---------- */
+
+/* other people's text is isolated: an RTL override or other bidi control in a message or a
+   nickname can't flip the UI around it. long unbroken strings wrap; stacked combining marks
+   (zalgo) are clipped to the bubble instead of spilling over the rest of the log. */
+.r-bubble,
+.r-msgs__nick,
+.r-sys__text,
+.r-typing__text,
+.r-nick__name {
+  unicode-bidi: isolate;
+}
+.r-text {
+  unicode-bidi: isolate;
+  overflow-wrap: anywhere;
+}
+.r-msgs__nick {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.r-sys {
+  overflow: hidden;
+}
+.r-sys__text {
+  min-width: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.r-typing__text,
+.r-nick__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.r-nick,
+.r-typing {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* burn after reading is a courtesy, and the UI says so */
+.r-bubble__caveat {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+.r-burnnote {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 10px 2px 7px;
+  border-radius: 999px;
+  background: var(--r-burn-soft);
+  color: var(--r-burn);
+  font-size: 0.76rem;
+  font-weight: 700;
+  white-space: nowrap;
+  animation: r-rise-in-plain 220ms ease-out both;
+}
+.r-burnnote .r-ico {
+  width: 13px;
+  height: 13px;
+}
+@media (prefers-color-scheme: light) {
+  .r-burnnote,
+  .r-bubble__thaw b,
+  .r-bubble__thaw .r-ico {
+    color: #b4480f;
+  }
+}
+
+/* on a phone the whole bubble is the target for reacting */
+@media (hover: none) {
+  .r-bubble.can-react {
+    cursor: pointer;
+  }
+  .r-bubble__react {
+    opacity: 0.6;
+  }
+  .sheet__close:hover,
+  .r-send.is-ready:hover,
+  .r-picker__btn:hover {
+    transform: none;
+  }
+}
+
+/* fingers: 44px targets. small chips keep their look and get a larger invisible hit area */
+@media (pointer: coarse) {
+  .roombar__actions .btn,
+  .roombar__owner .btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .r-send,
+  .r-burnbtn,
+  .sheet__close {
+    width: 44px;
+    height: 44px;
+  }
+  .composer__input {
+    min-height: 44px;
+    padding-block: 10px;
+  }
+  .composer__field {
+    gap: 4px;
+    padding-left: 14px;
+  }
+  .r-picker {
+    gap: 4px;
+  }
+  .r-picker__btn {
+    width: 44px;
+    height: 44px;
+    font-size: 1.3rem;
+  }
+  .r-jump {
+    min-height: 44px;
+  }
+  .r-nick {
+    position: relative;
+    height: 36px;
+    overflow: visible;
+  }
+  button.r-nick::after,
+  .r-react::after,
+  .r-nick__save::after {
+    content: "";
+    position: absolute;
+    inset: -5px -2px;
+  }
+  .r-nick__save {
+    position: relative;
+    width: 30px;
+    height: 30px;
+  }
+  .r-nick__save::after {
+    inset: -7px;
+  }
+  .r-react {
+    position: relative;
+    min-height: 34px;
+    padding-inline: 11px 12px;
+  }
+  .r-reacts {
+    gap: 8px;
+    margin-top: 2px;
+  }
+}
+
+/* nothing behind the room's panels but the page background: the backdrop blur buys nothing there
+   and costs a lot on a phone while the log scrolls */
+@media (max-width: 860px), (pointer: coarse) {
+  .room .panel,
+  .room .panel::before {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .sheet::backdrop {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(4, 8, 20, 0.66);
+  }
+}
+
+/* small phones: the creator bar keeps its two rows but tightens up */
+@media (max-width: 400px) {
+  .roombar {
+    gap: 8px 10px;
+    padding: 8px 10px 8px 8px;
+  }
+  .r-ring {
+    width: 56px;
+    height: 56px;
+  }
+  .roombar__time {
+    font-size: 1.8rem;
+  }
+  .roombar__meta {
+    gap: 6px 10px;
+    font-size: 0.8rem;
+  }
+  .roombar__owner,
+  .roombar__actions {
+    gap: 6px;
+  }
+  .roombar__invite {
+    padding-inline: 12px;
+  }
+  .messages {
+    padding-inline: 10px;
+  }
+  .r-msgs {
+    max-width: 90%;
+  }
+}
+
+/* phone sheets: a bottom sheet with a grab handle that can be swiped down, link actions first */
+.sheet {
+  overscroll-behavior: contain;
+}
+@media (max-width: 559px) {
+  .sheet {
+    position: fixed;
+    padding-top: 26px;
+  }
+  .sheet::before {
+    content: "";
+    position: absolute;
+    top: 9px;
+    left: 50%;
+    width: 40px;
+    height: 5px;
+    border-radius: 5px;
+    background: var(--line);
+    transform: translateX(-50%);
+  }
+  .sheet.is-dragging {
+    transition: none;
+    animation: none;
+  }
+  .sheet.is-settling {
+    transition: transform 220ms ease-out;
+  }
+}
+@media (max-width: 599px) {
+  .r-share__side {
+    order: -1;
+  }
+  .r-iceframe__qr {
+    width: min(248px, 66vw);
+  }
+}
+/* short landscape phones: the sheet is a centered card that scrolls; keep the QR scannable */
+@media (max-height: 500px) and (min-width: 560px) {
+  .sheet {
+    max-height: calc(100dvh - 16px);
+    padding: 16px 20px;
+    gap: 12px;
+  }
+  .r-iceframe__qr {
+    width: min(200px, 60dvh);
+  }
+  .r-iceframe {
+    gap: 12px;
+  }
+}
+
+/* short landscape phones: one slim bar row so the log keeps some height */
+@media (max-height: 500px) and (min-width: 560px) {
+  .app--room main {
+    padding-top: 6px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
+  }
+  .room {
+    gap: 6px;
+  }
+  .roombar,
+  .roombar--owner {
+    grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+    grid-template-areas: "ring clock meta owner actions";
+    gap: 10px;
+    padding: 6px 10px 6px 6px;
+  }
+  .r-ring {
+    width: 44px;
+    height: 44px;
+  }
+  .roombar__time {
+    font-size: 1.5rem;
+  }
+  .roombar__meta {
+    border-top: 0;
+    padding: 0 0 0 12px;
+    border-left: 1px solid var(--line);
+  }
+  .roombar__e2e {
+    display: none;
+  }
+  .composer {
+    padding: 6px 8px;
+    gap: 4px;
+  }
+  .composer__top {
+    min-height: 0;
+  }
+  .r-hush__art,
+  .r-hush__facts {
+    display: none;
+  }
+  .app--room .topnav__inner {
+    min-height: 48px;
+    padding-block: 2px;
+  }
+  .r-lockbtn__text,
+  .r-meltbtn__text,
+  .roombar__leave-text,
+  .r-presence__slot:not(.is-here) {
+    display: none;
+  }
+  .roombar__owner .btn,
+  .roombar__leave {
+    padding-inline: 11px;
+  }
+  /* name chip and field side by side */
+  .composer {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+  }
+  .composer__top {
+    flex-wrap: nowrap;
+    max-width: 38vw;
+    overflow: hidden;
+  }
+}
+
+/* the relay dropped it (rate limit): be honest about it on the bubble */
+.r-bubble--undelivered {
+  opacity: 0.6;
+  border-style: dashed !important;
+}
+.r-bubble__undelivered {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.7rem;
+  color: var(--danger);
 }

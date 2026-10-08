@@ -14,11 +14,12 @@ import "./styles/honest.css";
 import "./styles/final.css";
 import "./styles/room.css";
 import "./styles/how.css";
+import "./styles/error.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { navigate } from "./lib/router";
-import { joinFromFragment, setNotice, wipeNow } from "./state/session";
+import { joinFromFragment, networkDown, resetToStart, setNotice, wake, wipeNow } from "./state/session";
 
 /**
  * A room link looks like /r#<secret>. Read the fragment once, then take it out
@@ -40,11 +41,20 @@ async function takeFragment(): Promise<void> {
 void takeFragment();
 // someone pastes a different room link into the same tab
 window.addEventListener("hashchange", () => void takeFragment());
-// closing the tab or navigating away: say bye (best effort) and drop everything
+// closing the tab, navigating away or going into the back/forward cache: send the
+// pre-sealed goodbye and wipe everything, synchronously (nothing awaits on this path)
 window.addEventListener("pagehide", wipeNow);
-// restored from the back/forward cache: the room is already gone
+// restored from the back/forward cache: the room is already gone; show a clean start screen
 window.addEventListener("pageshow", (e) => {
-  if (e.persisted && location.pathname === "/r") navigate("/", { replace: true });
+  if (!e.persisted) return;
+  resetToStart();
+  if (location.pathname === "/r") navigate("/", { replace: true });
+});
+// real life: wifi drops, phones sleep. Reconnect right away when things come back.
+window.addEventListener("online", () => wake("online"));
+window.addEventListener("offline", networkDown);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") wake("visible");
 });
 
 createRoot(document.getElementById("root")!).render(

@@ -58,6 +58,16 @@
   max-width: 44ch;
   margin: 0;
 }
+.how-hero__audit {
+  display: inline-block;
+  margin: 14px 0 0;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--warn-border);
+  background: var(--warn-bg);
+  color: var(--warn-text);
+  font-size: 0.78rem;
+}
 .how-hero__mascot {
   position: relative;
   justify-self: end;
@@ -471,6 +481,12 @@
 .how-toc a[aria-current] {
   color: var(--text);
   background: var(--panel-strong);
+}
+@media (pointer: coarse) {
+  .how-toc a {
+    min-height: 44px;
+    align-items: center;
+  }
 }
 .how-toc__n {
   font-size: 0.7rem;

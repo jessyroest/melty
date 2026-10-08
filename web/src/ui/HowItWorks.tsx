@@ -107,7 +107,8 @@ const DOESNT: ReactNode[] = [
   </>,
   <>
     <strong>where the link travels:</strong> the messenger you shared it in, your clipboard, browser history. the app
-    strips it from the address bar right after opening, but the browser may already have recorded the visit.
+    strips it from the address bar right after opening, but opening a room link leaves it, key included, in your
+    browser history (measured in Edge and Chrome). pasting it into "join a room" avoids that.
   </>,
   <>
     <strong>metadata.</strong> the relay and Cloudflare see IP addresses, connection times, how many people are in a
@@ -133,24 +134,28 @@ const DONT: { title: string; body: string }[] = [
   { title: "no tracking", body: "no analytics, no cookies, no web storage." },
   { title: "no third parties", body: "no third-party scripts or fonts. we host our own." },
   { title: "no file uploads", body: "just text, up to 4 KB per message." },
-  { title: "no logs", body: "the relay writes no logs. the data still passes through Cloudflare." },
+  { title: "no relay logs", body: "the relay writes no logs. the data still passes through Cloudflare." },
   { title: "no history", body: "late joiners see nothing sent before they arrived." },
 ];
 
 const SPEC: [string, ReactNode][] = [
   ["secret", "32 random bytes · crypto.getRandomValues · in the link after #"],
   ["kdf", "HKDF-SHA256 · salt: 32 zero bytes"],
-  ["room id", <>info <q>room-id-v1</q> · 32 bytes · base64url · sent to the relay</>],
+  ["room id", <>info <q>room-id-v1</q> · 32 bytes · base64url · sent to the relay in a WebSocket header, not the URL</>],
   ["key", <>info <q>room-key-v1</q> · AES-256-GCM · non-extractable</>],
   ["iv", "12 random bytes, fresh for every message"],
   ["aad", "roomId"],
   ["on the wire", "{iv, ct}"],
   ["relay stores", "expiresAt"],
-  ["limits", "8 people · 4 KB plaintext · 5 msg/s per connection · 20 new rooms per IP per hour"],
+  [
+    "limits",
+    "8 people · 4 KB plaintext · 5 msg/s per connection, 20 per room · 20 new rooms per IP per hour · 60 connection attempts per IP per minute",
+  ],
   ["encrypted extras", "typing notices · reactions · burn-after-read flag, all inside the ciphertext"],
   ["creator proof", "32 random bytes kept in memory · relay only holds its SHA-256, on open sockets, never in storage"],
   ["creator can", "lock the room (no newcomers) · melt it now (wiped for everyone)"],
   ["not yet", "key exchange · forward secrecy · replay protection · padding"],
+  ["audit", "not independently audited (yet)"],
 ];
 
 type HeadProps = { id: string; n: string; eyebrow: string; title: string; children?: ReactNode };
@@ -204,6 +209,7 @@ export function HowItWorks() {
             your browser seals every message before it leaves. the relay passes sealed envelopes along and keeps only
             an expiry time. here's exactly how, and where it stops.
           </p>
+          <p className="how-hero__audit mono">not independently audited (yet).</p>
         </div>
         <LiveMascot size={150} pokeable className="how-hero__mascot" />
       </header>

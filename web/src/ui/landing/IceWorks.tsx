@@ -67,7 +67,7 @@ export function IceWorks() {
         </h2>
         <div>
           <p className="lead">four ideas, no magic. the details are on the how-it-works page.</p>
-          <p className="l-works__kicker mono">key · noise · nothing kept · deadline</p>
+          <p className="l-works__kicker mono">key · noise · no messages stored · deadline</p>
         </div>
       </div>
       <div className="l-works__grid">
@@ -79,7 +79,7 @@ export function IceWorks() {
           messages are sealed with AES-256-GCM on your device. the relay passes sealed envelopes along and can't open
           them.
         </WorkCard>
-        <WorkCard n={3} tag="the storage" title="nothing is kept" illo={() => <StoreDiagram />}>
+        <WorkCard n={3} tag="the storage" title="no messages stored" illo={() => <StoreDiagram />}>
           no message is ever written to the server's storage. the only thing it remembers is when your room melts.
         </WorkCard>
         <WorkCard n={4} tag="the timer" title="a real deadline" wide illo={(live) => <DeadlineDiagram live={live} />}>

@@ -5,6 +5,7 @@ Temporary chat rooms, no account needed. You open a room, share the link (or QR 
 Messages are **end-to-end encrypted** (AES-256-GCM). The relay only ever sees a room id and ciphertext, and it stores nothing except when the room expires.
 
 > Status: phases 1 and 3 are done. The 4-word codes and the hybrid key exchange (phase 2) are not built yet.
+> melty has **not been independently audited**. The security properties below are what the code is designed and tested to do, not the result of an outside review.
 
 ## Features
 
@@ -48,12 +49,14 @@ To test with two people, open the room link in a second browser or a private win
 
 | command | what it checks |
 |---|---|
+| `pnpm lint` | ESLint over web, relay and scripts (`eslint.config.mjs`). Errors fail CI; `console.*` in `relay/src` is an error |
 | `pnpm test` | web: crypto (AES-GCM roundtrip; wrong key / tampered ciphertext / IV / AAD fail; HKDF determinism; roomId doesn't leak the secret). relay (in workerd via `@cloudflare/vitest-plugin`): forwarding, nothing stored, expiry + refusal afterwards, every limit, origin check, and **no console output during a full room lifecycle** |
 | `pnpm check:logs` | no logging calls in `relay/src`, Workers observability off, no logpush / tail consumers |
 | `pnpm build && pnpm check:bundle` | the built bundle references only our own origin and the relay: no external URLs, no inline scripts/styles, no `data:` URIs |
 | `pnpm e2e:features` | needs the same setup. Three browsers check typing, reactions, burn-after-read, lock / unlock, and melt-now, plus no CSP violations |
 | `pnpm e2e` | needs the relay and `preview` running. Two real browser sessions chat through the relay. Also checks: the fragment leaves the address bar; no web storage, cookies or IndexedDB are used; no request leaves our origin + relay; no CSP violations |
-| `pnpm check` | test + build + check:bundle + check:logs |
+| `pnpm typecheck` | `tsc --noEmit` for web and relay |
+| `pnpm check` | lint + typecheck + test + build + check:bundle + check:logs |
 
 The e2e test uses your locally installed Edge (`BROWSER_CHANNEL=chrome` for Chrome) through `playwright-core`. Nothing is downloaded.
 
@@ -105,24 +108,31 @@ After deploying either way, open the site and check the response headers in devt
    - `roomId` (`info="room-id-v1"`): sent to the relay.
    - an AES-256-GCM key (`info="room-key-v1"`): non-extractable, never leaves the browser.
 3. **Messages.** Chat messages and join / leave / nickname notices are JSON. Each one is encrypted with a fresh random 12-byte IV, with the roomId as additional data. The relay receives `{iv, ct}` and nothing else.
-4. **Relay.** One Durable Object per room. It forwards ciphertext to the other sockets and stores only `expiresAt`. It also enforces these limits:
+4. **Transport.** The browser connects to the fixed path `wss://<relay>/ws`. The room id travels in the `Sec-WebSocket-Protocol` header, never in the URL path or query. So do the ttl and the SHA-256 of the creator secret when creating a room: `melty.v1, r.<roomId>, c.<ttl>, o.<hash>`. The relay answers with `Sec-WebSocket-Protocol: melty.v1`.
+5. **Relay.** One Durable Object per room. It forwards ciphertext to the other sockets and stores only `expiresAt`. It also enforces these limits:
 
    | limit | value |
    |---|---|
    | people per room | 8 |
    | plaintext per message | 4 KB |
    | messages per connection | 5 per second |
-   | new rooms per IP | 20 per hour (counted in memory under an HMAC with a random per-instance key; never stored) |
+   | messages per room, all connections together | 20 per second (burst 20; in the room object's memory, never stored) |
+   | connection attempts per IP (joins, creates, reconnects) | 60 per minute |
+   | new rooms per IP | 20 per hour |
 
-5. **Expiry.** At `expiresAt` an alarm fires. It sends `expired` and closes every socket, then deletes all state. For 24 hours afterwards a tombstone refuses the room id, and then the tombstone is deleted too.
-6. **Creator controls.**
+   Per-IP counts are kept in memory under an HMAC of the address with a random per-instance key, and never stored. Over the connection limit a socket is refused with `slow` (close code 4031).
+
+6. **Expiry.** At `expiresAt` an alarm fires. It sends `expired` and closes every socket, then deletes all state. For 24 hours afterwards a tombstone refuses the room id, and then the tombstone is deleted too.
+7. **Creator controls.**
    - The creator's browser makes a second random 32-byte secret and gives the relay only its SHA-256.
    - The relay keeps that hash, and the room's locked flag, on the open sockets in memory, never in storage.
    - To lock or melt, the creator sends the secret itself; the relay checks it against the hash.
    - When the room has nobody in it, the creator rights are gone, and a later joiner can't claim them.
-7. **Client.** The client keeps everything in memory only. Expiry, leaving or closing the tab wipes the secret (zeroed), the key and the messages, and returns to the start screen. The countdown uses the relay's clock.
+8. **Client.** The client keeps everything in memory only. Expiry, leaving or closing the tab wipes the secret (zeroed), the key and the messages, and returns to the start screen. The countdown uses the relay's clock.
 
 ## Threat model
+
+This threat model has **not been independently audited**. It describes what the code is built to do; no outside party has reviewed or tested it.
 
 **Protects against**
 
@@ -135,12 +145,13 @@ After deploying either way, open the site and check the response headers in devt
 - Screenshots, or photos of the screen.
 - Compromised devices, or malicious browser extensions.
 - Someone forwarding the link. Whoever has it can read along and post under any nickname. Nicknames are not verified.
-- Where the link travels: the messenger used to share it, the clipboard, browser history. The app strips the fragment from the address bar right after opening, but the browser may already have recorded the visit.
+- Where the link travels: the messenger used to share it, the clipboard.
+- **Browser history keeps the key.** When you open a room link (typed or clicked), the browser saves the full link, including the part after `#`, before melty can remove it from the address bar. We measured this in Edge 154 and Chrome 154 (`scripts/history-check.mjs`): the link stays in the profile's History database, favicon cache and session-restore files until you clear them. Anyone who can read your browser profile can recover the key and use it while the room is still open. If they have recorded the encrypted traffic, they can also read it afterwards. Opening melty and pasting the link into "join a room" avoids this. The join field is cleared before it's used and is not a form submit, so neither browser keeps it: in our measurement, both profiles held the key nowhere (headless Edge and Chrome; other browsers and private windows weren't measured).
 - The server / Cloudflare seeing metadata:
   - IP addresses
   - connection times
   - the number of people in a room
-  - the room id (not secret, and it doesn't reveal the key)
+  - the room id (not secret, and it doesn't reveal the key; sent in a request header, not in the URL)
   - message sizes and timing
   
   The relay writes no logs, but the data passes through Cloudflare.
@@ -153,8 +164,12 @@ After deploying either way, open the site and check the response headers in devt
 
 ## Further reading
 
+- [SPEC.md](SPEC.md): the owner's spec and hard rules.
+- [AUDIT.md](AUDIT.md): an internal check of the code against the spec, item by item. It is a self-review, not an independent audit.
 - [ASSUMPTIONS.md](ASSUMPTIONS.md): every choice made that the spec didn't pin down.
 - [HIGGSFIELD.md](HIGGSFIELD.md): generated images, prompts and credits used.
+
+> **Note:** `docs/token/` is internal research. Remove it from the repo before ever making the repository public.
 
 ## Contributing
 

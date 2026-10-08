@@ -63,10 +63,12 @@ pnpm --filter @melty/web preview    # terminal 2, http://localhost:4173
 
 | command | needs running servers? | what it does |
 |---|---|---|
+| `pnpm lint` | no | ESLint over web, relay and scripts (config: `eslint.config.mjs`). Must exit with **0 errors**. Warnings are known findings from when ESLint was introduced (listed as `TODO(lint)` in the config); don't add new ones. `console.*` in `relay/src` is an error |
+| `pnpm typecheck` | no | `tsc --noEmit` for web and relay |
 | `pnpm test` | no | web unit tests (crypto) and relay tests in workerd via `@cloudflare/vitest-plugin`, including a test that the relay produces no console output |
 | `pnpm check:logs` | no | static check: no `console.*` / logging calls in `relay/src`, Workers observability off, no logpush or tail consumers |
 | `pnpm check:bundle` | no, but run `pnpm build` first | the built bundle references only our own origin and the relay: no external URLs, no inline scripts or styles, no `data:` URIs |
-| `pnpm check` | no | `test` + `build` + `check:bundle` + `check:logs` in one go. Run this before every PR. |
+| `pnpm check` | no | `lint` + `typecheck` + `test` + `build` + `check:bundle` + `check:logs` in one go. Run this before every PR. |
 | `pnpm e2e` | **yes**: relay on :8787 and `web preview` on :4173 | two real browser sessions chat through the relay; also checks the fragment leaves the address bar, no storage or cookies are used, no request leaves our origin + relay, no CSP violations |
 | `pnpm e2e:features` | **yes**: same as `pnpm e2e` | three browsers check typing, reactions, burn after reading, lock / unlock and melt now, plus no CSP violations |
 
@@ -87,13 +89,23 @@ $env:BROWSER_CHANNEL = "chrome"; pnpm e2e
 
 On macOS you most likely need `BROWSER_CHANNEL=chrome` unless you have Edge installed. Set `SHOTS_DIR=<folder>` to have the tests save screenshots there.
 
-CI runs `pnpm test`, `pnpm build`, `pnpm check:bundle`, `pnpm check:logs` and both e2e tests (with Chrome) on every push and pull request to `main`. See [.github/workflows/ci.yml](.github/workflows/ci.yml).
+CI runs `pnpm lint`, the web and relay typechecks, `pnpm test`, `pnpm build`, `pnpm check:bundle`, `pnpm check:logs` and the e2e tests (with Chrome) on every push and pull request to `main`. See [.github/workflows/ci.yml](.github/workflows/ci.yml).
+
+CI also runs a **secrets scan** with [gitleaks](https://github.com/gitleaks/gitleaks-action) over the full git history. If it flags something, don't just delete the line in a new commit: the value is still in history. Treat it as leaked, revoke or rotate it first, then ask the owner how to clean up the history. A false positive can be allowlisted in a `.gitleaksignore` file, with the reason in the PR.
+
+### Dependencies
+
+All versions in the three `package.json` files are pinned exactly (no `^` or `~`), and `pnpm-lock.yaml` is committed. CI installs with `--frozen-lockfile`, so a `package.json` change without the matching lockfile change fails.
+
+- Add a dependency with `pnpm add -E <pkg>` (in the right package, or `-w` for the root) so it is pinned too. Every new runtime dependency in `web/` ends up in the shipped bundle: keep them rare and self-hostable.
+- **Dependabot** opens update PRs every Monday ([.github/dependabot.yml](.github/dependabot.yml)): one grouped PR for all minor and patch bumps, a separate PR per major bump, and one for GitHub Actions. Treat them like any other PR: CI must be green, and read the changelog for anything that touches crypto, the relay, the build or the CSP. Major bumps need the owner's review.
 
 ## Project structure
 
 ```
 melty/
-├─ package.json              root scripts (dev, build, test, check, e2e)
+├─ package.json              root scripts (dev, build, lint, typecheck, test, check, e2e)
+├─ eslint.config.mjs         ESLint flat config for the whole repo
 ├─ pnpm-workspace.yaml       workspace: web + relay
 ├─ web/                      @melty/web: Vite + React 19 + TypeScript, hand-written CSS
 │  ├─ index.html

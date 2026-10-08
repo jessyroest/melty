@@ -1,4 +1,14 @@
-import type { ClientFrame, ErrorCode, ServerFrame, Ttl } from "@relay/protocol";
+import {
+  type ClientFrame,
+  type ErrorCode,
+  PROTO_CREATE,
+  PROTO_OWNER,
+  PROTO_ROOM,
+  type ServerFrame,
+  SUBPROTOCOL,
+  type Ttl,
+  WS_PATH,
+} from "@relay/protocol";
 import type { Sealed } from "../crypto/aead";
 
 export const RELAY_URL: string = import.meta.env.VITE_RELAY_URL ?? "ws://localhost:8787";
@@ -11,15 +21,29 @@ export type RelayEvent =
   | { type: "msg"; sealed: Sealed }
   | { type: "expired" }
   | { type: "error"; code: ErrorCode }
-  | { type: "closed"; code: number };
+  | { type: "closed"; code: number }
+  /** the socket closed without ever opening: handshake refused, network down or relay offline */
+  | { type: "unreachable" };
 
 const PING_MS = 30_000;
+
+/**
+ * The subprotocol offer that carries the room: `melty.v1, r.<roomId>[, c.<ttl>][, o.<ownerHash>]`.
+ * It travels in the `Sec-WebSocket-Protocol` header, so nothing about the room is in the URL.
+ */
+export function relayProtocols(roomId: string, create?: Ttl, owner?: string): string[] {
+  const protocols = [SUBPROTOCOL, PROTO_ROOM + roomId];
+  if (create) protocols.push(PROTO_CREATE + String(create));
+  if (owner) protocols.push(PROTO_OWNER + owner);
+  return protocols;
+}
 
 /** One WebSocket to the relay. Knows nothing about keys or plaintext. */
 export class RelayConnection {
   private ws: WebSocket;
   private ping: ReturnType<typeof setInterval> | undefined;
   private done = false;
+  private opened = false;
 
   /** `owner` is the SHA-256 of the creator's secret; only the creator ever has one */
   constructor(
@@ -28,11 +52,10 @@ export class RelayConnection {
     owner: string | undefined,
     private onEvent: (e: RelayEvent) => void,
   ) {
-    const url = new URL(`/rooms/${roomId}/ws`, RELAY_URL);
-    if (create) url.searchParams.set("create", String(create));
-    if (owner) url.searchParams.set("owner", owner);
-    this.ws = new WebSocket(url);
+    // a fixed path; the room id, ttl and owner hash go in the subprotocol offer
+    this.ws = new WebSocket(new URL(WS_PATH, RELAY_URL), relayProtocols(roomId, create, owner));
     this.ws.onopen = () => {
+      this.opened = true;
       this.ping = setInterval(() => this.ws.send('{"t":"ping"}'), PING_MS);
     };
     this.ws.onmessage = (e) => {
@@ -41,7 +64,7 @@ export class RelayConnection {
     };
     this.ws.onclose = (e) => {
       clearInterval(this.ping);
-      if (!this.done) this.onEvent({ type: "closed", code: e.code });
+      if (!this.done) this.onEvent(this.opened ? { type: "closed", code: e.code } : { type: "unreachable" });
       this.done = true;
     };
   }
@@ -53,6 +76,13 @@ export class RelayConnection {
   send(sealed: Sealed): boolean {
     if (!this.open) return false;
     this.ws.send(JSON.stringify({ t: "msg", iv: sealed.iv, ct: sealed.ct }));
+    return true;
+  }
+
+  /** send a pre-built frame synchronously, if the socket is open */
+  sendRaw(frame: string): boolean {
+    if (!this.open) return false;
+    this.ws.send(frame);
     return true;
   }
 

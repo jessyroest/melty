@@ -1,7 +1,31 @@
 import { runDurableObjectAlarm } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CLOSE, CREATE_LIMIT_PER_HOUR, inferTtl, MAX_CT_CHARS, MAX_FRAME_CHARS, MAX_PARTICIPANTS } from "../src/protocol";
-import { connect, fakeMsg, makeOwner, randomRoomId, rawFetch, roomStub, setStored, storageKeys, tick } from "./helpers";
+import {
+  CLOSE,
+  CONNECT_BURST,
+  CONNECT_PER_MIN,
+  CREATE_LIMIT_PER_HOUR,
+  inferTtl,
+  MAX_CT_CHARS,
+  MAX_FRAME_CHARS,
+  MAX_PARTICIPANTS,
+  RATE_BURST,
+  ROOM_BURST,
+  SUBPROTOCOL,
+} from "../src/protocol";
+import {
+  type Conn,
+  connect,
+  fakeMsg,
+  makeOwner,
+  offer,
+  randomRoomId,
+  rawFetch,
+  roomStub,
+  setStored,
+  storageKeys,
+  tick,
+} from "./helpers";
 
 describe("rooms", () => {
   it("creating a room says hello with server time and expiry", async () => {
@@ -322,8 +346,210 @@ describe("worker routing", () => {
     expect((await rawFetch(id, { create: 600, origin: null })).status).toBe(403);
     expect((await rawFetch(id, { upgrade: false })).status).toBe(426);
     expect((await rawFetch(id, { path: "/rooms/short/ws" })).status).toBe(404);
+    expect((await rawFetch(id, { path: "/ws/" })).status).toBe(404);
     expect((await rawFetch(id, { path: "/" })).status).toBe(404);
     expect(await storageKeys(id)).toEqual([]);
+  });
+});
+
+describe("transport: everything in Sec-WebSocket-Protocol, nothing in the URL", () => {
+  it("the 101 selects exactly melty.v1, for accepted and refused sockets alike", async () => {
+    const id = randomRoomId();
+    const a = await connect(id, { create: 600 });
+    expect(a.res.status).toBe(101);
+    expect(a.res.headers.get("Sec-WebSocket-Protocol")).toBe(SUBPROTOCOL);
+    expect((await a.next()).t).toBe("hello");
+
+    const missing = await connect(randomRoomId());
+    expect(missing.res.headers.get("Sec-WebSocket-Protocol")).toBe(SUBPROTOCOL);
+    expect(await missing.next()).toEqual({ t: "error", code: "not_found" });
+
+    const bad = await connect(randomRoomId(), { create: 999 });
+    expect(bad.res.headers.get("Sec-WebSocket-Protocol")).toBe(SUBPROTOCOL);
+    expect(await bad.next()).toEqual({ t: "error", code: "bad" });
+  });
+
+  it("creates and joins a room through the fixed path /ws, with no room id, ttl or owner in the URL", async () => {
+    const id = randomRoomId();
+    const owner = await makeOwner();
+    // rawFetch's URL is exactly https://relay.test/ws: no path segment, no query
+    const a = await connect(id, { create: 3600, owner: owner.hash });
+    expect(await a.next()).toMatchObject({ t: "hello", ttl: 3600, n: 1 });
+    const b = await connect(id);
+    expect(await b.next()).toMatchObject({ t: "hello", ttl: 3600, n: 2 });
+    // the room object is keyed by the id from the header, and owner rights came through it
+    expect(await storageKeys(id)).toEqual(["expiresAt"]);
+    expect(await a.next()).toEqual({ t: "presence", n: 2 });
+    a.send({ t: "lock", owner: owner.secret, on: true });
+    expect(await a.next()).toEqual({ t: "locked", on: true });
+  });
+
+  it("refuses the old URL scheme and any query string, so nothing about a room can ride in the URL", async () => {
+    const id = randomRoomId();
+    expect((await rawFetch(id, { path: `/rooms/${id}/ws?create=600`, protocol: null })).status).toBe(404);
+    expect((await rawFetch(id, { path: `/rooms/${id}/ws`, create: 600 })).status).toBe(404);
+    expect((await rawFetch(id, { path: "/ws?create=600", create: 600 })).status).toBe(400);
+    expect((await rawFetch(id, { path: `/ws?r=${id}`, create: 600 })).status).toBe(400);
+    expect(await storageKeys(id)).toEqual([]);
+  });
+
+  it("refuses a missing or unusable offer with a plain 400", async () => {
+    const id = randomRoomId();
+    const cases: (string | null)[] = [
+      null,
+      "",
+      `r.${id}, c.600`, // melty.v1 not offered
+      `melty.v2, r.${id}, c.600`,
+      `${SUBPROTOCOL}, ${SUBPROTOCOL}, r.${id}, c.600`,
+      `${SUBPROTOCOL}, c.600`, // no room id
+      `${SUBPROTOCOL}, r.${id.slice(1)}, c.600`,
+      `${SUBPROTOCOL}, r.${id}x, c.600`,
+      `${SUBPROTOCOL}, r.${id.slice(1)}+, c.600`,
+      `${SUBPROTOCOL}, r.${id}, r.${randomRoomId()}, c.600`,
+      `${SUBPROTOCOL}, R.${id}, c.600`,
+      `${SUBPROTOCOL}, r.${id}, c.600, ${"x".repeat(300)}`,
+    ];
+    for (const protocol of cases) {
+      const res = await rawFetch(id, { protocol });
+      expect(res.status, String(protocol)).toBe(400);
+      expect(res.webSocket, String(protocol)).toBeNull();
+    }
+    expect(await storageKeys(id)).toEqual([]);
+  });
+
+  it("refuses malformed parts next to a valid room id with error bad, creating nothing", async () => {
+    const id = randomRoomId();
+    const owner = await makeOwner();
+    const cases = [
+      `${SUBPROTOCOL}, r.${id}, c.999`,
+      `${SUBPROTOCOL}, r.${id}, c.`,
+      `${SUBPROTOCOL}, r.${id}, c.0600`,
+      `${SUBPROTOCOL}, r.${id}, c.6e2`,
+      `${SUBPROTOCOL}, r.${id}, c.600, c.600`,
+      `${SUBPROTOCOL}, r.${id}, c.600, o.not-a-hash`,
+      `${SUBPROTOCOL}, r.${id}, c.600, o.${owner.hash}, o.${owner.hash}`,
+      `${SUBPROTOCOL}, r.${id}, c.600, x.1`,
+      `${SUBPROTOCOL}, r.${id}, , c.600`,
+      `${SUBPROTOCOL}, r.${id}, c.600 o.${owner.hash}`,
+    ];
+    for (const protocol of cases) {
+      const c = await connect(id, { protocol });
+      expect(c.res.headers.get("Sec-WebSocket-Protocol")).toBe(SUBPROTOCOL);
+      expect(await c.next(), protocol).toEqual({ t: "error", code: "bad" });
+      expect((await c.closed).code).toBe(CLOSE.bad);
+    }
+    expect(await storageKeys(id)).toEqual([]);
+    // the same parts, well-formed and in any order, work
+    const ok = await connect(id, { protocol: `o.${owner.hash}, c.600,${SUBPROTOCOL},r.${id}` });
+    expect((await ok.next()).t).toBe("hello");
+  });
+
+  it("ignores internal headers sent by the client", async () => {
+    // a join can't create a room by forging the worker's create header
+    const id = randomRoomId();
+    const j = await connect(id, { headers: { "X-Relay-Create": "600" } });
+    expect(await j.next()).toEqual({ t: "error", code: "not_found" });
+    expect(await storageKeys(id)).toEqual([]);
+
+    // nor register an owner the offer didn't carry, nor force a refusal
+    const owner = await makeOwner();
+    const id2 = randomRoomId();
+    const a = await connect(id2, { create: 600, headers: { "X-Relay-Owner": owner.hash, "x-relay-reject": "full" } });
+    expect((await a.next()).t).toBe("hello");
+    a.send({ t: "melt", owner: owner.secret });
+    expect(await a.next()).toEqual({ t: "error", code: "bad" });
+    expect(await storageKeys(id2)).toEqual(["expiresAt"]);
+
+    // nor bend the ttl past what the offer validated
+    const c = await connect(randomRoomId(), { create: 600, headers: { "X-Relay-Create": "999999" } });
+    expect(await c.next()).toMatchObject({ t: "hello", ttl: 600 });
+  });
+
+  it("the offer helper builds what the browser client sends", () => {
+    expect(offer("ID", { create: 600, owner: "H" })).toBe(`${SUBPROTOCOL}, r.ID, c.600, o.H`);
+  });
+});
+
+describe("per-address and per-room limits", () => {
+  it(`allows ${CONNECT_BURST} connection attempts a minute per address, joins included; other addresses are unaffected`, async () => {
+    // freeze the clock so the bucket can't refill while the attempts are in flight
+    const t0 = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(t0);
+    try {
+      const ip = "192.0.2.44";
+      const extra = 10;
+      // joins to rooms that don't exist: still attempts, and they create nothing
+      const conns = await Promise.all(Array.from({ length: CONNECT_BURST + extra }, () => connect(randomRoomId(), { ip })));
+      const frames = await Promise.all(conns.map((c) => c.next()));
+      const count = (code: string) => frames.filter((f) => f.t === "error" && f.code === code).length;
+      expect(count("not_found")).toBe(CONNECT_BURST);
+      expect(count("slow")).toBe(extra);
+      const refused = conns[frames.findIndex((f) => f.t === "error" && f.code === "slow")]!;
+      expect((await refused.closed).code).toBe(CLOSE.slow);
+
+      // creating from that address is refused too, as "slow", and creates nothing
+      const id = randomRoomId();
+      const create = await connect(id, { create: 600, ip });
+      expect(await create.next()).toEqual({ t: "error", code: "slow" });
+      expect(await storageKeys(id)).toEqual([]);
+
+      // a different address is fine
+      const other = await connect(randomRoomId(), { create: 600, ip: "192.0.2.45" });
+      expect((await other.next()).t).toBe("hello");
+
+      // one second later the first address has earned exactly one more attempt
+      clock.mockReturnValue(t0 + 60_000 / CONNECT_PER_MIN);
+      const again = await connect(id, { create: 600, ip });
+      expect((await again.next()).t).toBe("hello");
+      const more = await connect(randomRoomId(), { ip });
+      expect(await more.next()).toEqual({ t: "error", code: "slow" });
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it("caps a room's total message rate even when every connection stays under its own limit", async () => {
+    const id = randomRoomId();
+    const listener = await connect(id, { create: 600 });
+    await listener.next();
+    const senders: Conn[] = [];
+    for (let i = 1; i < MAX_PARTICIPANTS; i++) {
+      const c = await connect(id);
+      await c.next();
+      senders.push(c);
+    }
+    await tick(100);
+    listener.queue.length = 0;
+    for (const s of senders) s.queue.length = 0;
+
+    // 7 sockets x RATE_BURST messages: each within its own burst, 35 in total.
+    // The clock is frozen so no bucket refills while the frames arrive.
+    const t0 = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(t0);
+    try {
+      const total = senders.length * RATE_BURST;
+      for (let i = 0; i < RATE_BURST; i++) for (const s of senders) s.send(fakeMsg());
+      const count = () => ({
+        forwarded: listener.queue.filter((f) => f.t === "msg").length,
+        limited: senders.flatMap((s) => s.queue).filter((f) => f.t === "error" && f.code === "rate").length,
+      });
+      for (let waited = 0; waited < 3000 && count().forwarded + count().limited < total; waited += 50) await tick(50);
+      await tick(100);
+      const { forwarded, limited } = count();
+      expect(forwarded).toBe(ROOM_BURST);
+      expect(limited).toBe(total - ROOM_BURST);
+      // nothing else went anywhere: senders saw only others' messages and their own rate errors
+      for (const s of senders) expect(s.queue.every((f) => f.t === "msg" || (f.t === "error" && f.code === "rate"))).toBe(true);
+
+      // a second later the budget has refilled; it lives in memory only
+      clock.mockReturnValue(t0 + 1000);
+      listener.queue.length = 0;
+      senders[0]!.send(fakeMsg());
+      expect(await listener.next()).toEqual(fakeMsg());
+      expect(await storageKeys(id)).toEqual(["expiresAt"]);
+    } finally {
+      clock.mockRestore();
+    }
   });
 });
 

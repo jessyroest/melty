@@ -44,7 +44,7 @@ export default defineConfig(({ mode }) => {
     preview: {
       headers,
       allowedHosts: [publicUrl.hostname],
-      proxy: sameHostRelay ? { "/rooms": { target: "ws://localhost:8787", ws: true } } : undefined,
+      proxy: sameHostRelay ? { "/ws": { target: "ws://localhost:8787", ws: true } } : undefined,
     },
     test: { environment: "node", include: ["src/**/*.test.ts"] },
   };

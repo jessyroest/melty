@@ -1,4 +1,4 @@
-import { type CSSProperties, useState } from "react";
+import { type CSSProperties, type MouseEvent, useEffect, useRef, useState } from "react";
 import { REACTIONS, type Reaction } from "../crypto/message";
 import { BURN_MS, type Line } from "../state/session";
 import { FlameIcon, SmileIcon } from "./RoomIcons";
@@ -10,31 +10,65 @@ export type BubbleActions = {
   react: (lineId: number, emoji: Reaction) => void;
 };
 
+/** wrap a nickname in first-strong isolates, for attributes where <bdi> can't go */
+const FSI = String.fromCharCode(0x2068);
+const PDI = String.fromCharCode(0x2069);
+export const isolate = (s: string) => `${FSI}${s}${PDI}`;
+
+const touchOnly = () => matchMedia("(hover: none)").matches;
+
 /**
  * One chat bubble. Burn-after-read messages arrive frozen and only show their
  * text when you open them; then they count down and drip away.
  */
 export function Bubble({ line, nick, mine, actions }: { line: Line; nick: string; mine: boolean; actions: BubbleActions }) {
   const [picking, setPicking] = useState(false);
+  const picker = useRef<HTMLSpanElement>(null);
   const frozen = line.burn && !line.revealed;
-  const cls = `r-bubble${line.burn ? " r-bubble--burn" : ""}${frozen ? " r-bubble--frozen" : ""}${line.melting ? " is-melting" : ""}`;
+  const canReact = !!line.msgId && !line.melting && !frozen;
+  const cls = `r-bubble${line.burn ? " r-bubble--burn" : ""}${frozen ? " r-bubble--frozen" : ""}${line.melting ? " is-melting" : ""}${canReact ? " can-react" : ""}${line.undelivered ? " r-bubble--undelivered" : ""}`;
+
+  // phones can't hover to find the react button: a tap anywhere on the bubble opens the picker.
+  // (a long press still selects text, since that isn't a click)
+  const onTap = (e: MouseEvent<HTMLParagraphElement>) => {
+    if (!canReact || !touchOnly()) return;
+    if ((e.target as Element).closest("button")) return;
+    if (getSelection()?.toString()) return;
+    setPicking((p) => !p);
+  };
+
+  // the picker opens under the bubble; on a short phone screen that can be below the fold
+  useEffect(() => {
+    const el = picker.current;
+    const log = el?.closest<HTMLElement>(".messages");
+    if (!picking || !el || !log) return;
+    // layout offsets, not getBoundingClientRect: the picker is still mid pop-in (scaled down)
+    const behavior = matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+    const below = el.offsetTop + el.offsetHeight + 12 - log.clientHeight;
+    if (log.scrollTop < below) log.scrollTo({ top: below, behavior });
+    else if (el.offsetTop - 12 < log.scrollTop) log.scrollTo({ top: el.offsetTop - 12, behavior });
+  }, [picking]);
 
   return (
     <>
-      <p className={cls}>
+      <p className={cls} onClick={onTap}>
         {frozen ? (
           <button className="r-bubble__thaw" type="button" onClick={() => actions.reveal(line.id)}>
             <FlameIcon />
             <span>
               <b>burn after reading.</b> tap to open · it melts {BURN_MS / 1000}s later
+              <small className="r-bubble__caveat">best effort: a screenshot still keeps it</small>
             </span>
-            <span className="sr-only">, from {nick}</span>
+            <span className="sr-only">
+              , from <bdi>{nick}</bdi>
+            </span>
           </button>
         ) : (
           <>
-            <span className="sr-only">{mine ? "you: " : `${nick}: `}</span>
-            {line.text}
+            <span className="sr-only">{mine ? "you: " : <><bdi>{nick}</bdi>: </>}</span>
+            <bdi className="r-text">{line.text}</bdi>
             {line.burn && line.burnAt && <BurnTimer at={line.burnAt} />}
+            {line.undelivered && <small className="r-bubble__undelivered mono">not delivered</small>}
             {line.msgId && !line.melting && (
               <button
                 className={`r-bubble__react${picking ? " is-open" : ""}`}
@@ -50,7 +84,7 @@ export function Bubble({ line, nick, mine, actions }: { line: Line; nick: string
         )}
       </p>
       {picking && !frozen && (
-        <span className="r-picker" role="group" aria-label="pick a reaction">
+        <span ref={picker} className="r-picker" role="group" aria-label="pick a reaction">
           {REACTIONS.map((e) => (
             <button
               key={e}
@@ -85,8 +119,8 @@ function Reactions({ line, actions }: { line: Line; actions: BubbleActions }) {
             type="button"
             className={`r-react${mineToo ? " is-mine" : ""}`}
             aria-pressed={mineToo}
-            aria-label={`${e} from ${who.join(", ")}. ${mineToo ? "remove yours" : "add yours"}`}
-            title={who.join(", ")}
+            aria-label={`${e} from ${who.map(isolate).join(", ")}. ${mineToo ? "remove yours" : "add yours"}`}
+            title={who.map(isolate).join(", ")}
             onClick={() => actions.react(line.id, e)}
           >
             <span aria-hidden="true">{e}</span>

@@ -344,6 +344,10 @@
   .mascot__z--2 {
     opacity: 0.6;
   }
+  /* the wisps rest at opacity 0 and only show while animating: keep them visible, still */
+  .mascot__wisp {
+    opacity: 0.8;
+  }
   .cube-bubble {
     transition: none;
   }

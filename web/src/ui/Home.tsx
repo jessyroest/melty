@@ -114,7 +114,7 @@ export function Home({ notice, onJoin }: { notice: string | null; onJoin: () => 
             </span>
           </h1>
           <p className="lead l-hero__in" style={delay(460)}>
-            a chat room with a countdown. no account, no history. share a link, talk, and when the timer hits zero it's
+            a chat room with a countdown. no account, no chat history. share a link, talk, and when the timer hits zero it's
             just water.
           </p>
 
@@ -134,7 +134,7 @@ export function Home({ notice, onJoin }: { notice: string | null; onJoin: () => 
           <ul className="chips mono l-hero__in" style={delay(860)}>
             <li>end-to-end encrypted</li>
             <li>no account</li>
-            <li>messages never stored</li>
+            <li>messages never stored on the server</li>
           </ul>
         </div>
       </section>

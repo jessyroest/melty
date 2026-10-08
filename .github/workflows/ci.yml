@@ -18,7 +18,7 @@ env:
 
 jobs:
   check:
-    name: test, build, bundle + log checks
+    name: lint, typecheck, test, build, bundle + log checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -29,6 +29,12 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: lint
+        run: pnpm lint
+      - name: typecheck (web)
+        run: pnpm --filter @melty/web typecheck
+      - name: typecheck (relay)
+        run: pnpm --filter @melty/relay typecheck
       - run: pnpm test
       - run: pnpm build
       - run: pnpm check:bundle
@@ -81,8 +87,43 @@ jobs:
         env:
           BROWSER_CHANNEL: chrome
 
+      # These two scripts are new; each step is skipped (not failed) until its file exists.
+      - name: e2e xss
+        run: |
+          if [ -f scripts/e2e-xss.mjs ]; then pnpm e2e:xss; else echo "scripts/e2e-xss.mjs not present, skipping"; fi
+        env:
+          BROWSER_CHANNEL: chrome
+
+      - name: e2e resilience
+        run: |
+          if [ -f scripts/e2e-resilience.mjs ]; then pnpm e2e:resilience; else echo "scripts/e2e-resilience.mjs not present, skipping"; fi
+        env:
+          BROWSER_CHANNEL: chrome
+
       - name: Server output (on failure)
         if: failure()
         run: |
           echo "--- relay ---"; tail -n 50 "$RUNNER_TEMP/relay.log" || true
           echo "--- preview ---"; tail -n 50 "$RUNNER_TEMP/preview.log" || true
+
+  secrets:
+    name: secrets scan (gitleaks, full history)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read # the action lists a PR's commits through the API
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # full history, not just the last commit
+      - uses: gitleaks/gitleaks-action@v3
+        env:
+          # Required by the action (GitHub API calls). Free for repos on a personal account;
+          # an organization repo also needs a free GITLEAKS_LICENSE secret from gitleaks.io.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+          # No PR comments (would need pull-requests: write), and no report artifact,
+          # because the raw report would contain the leaked value itself.
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"

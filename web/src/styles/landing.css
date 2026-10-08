@@ -54,11 +54,24 @@
 .link-arrow:hover {
   text-decoration: underline;
 }
+/* fingers: text links get a taller hit area without changing the layout */
+@media (pointer: coarse) {
+  .linklike,
+  .link-arrow {
+    padding-block: 10px;
+    margin-block: -10px;
+  }
+  .link-arrow {
+    margin-top: -2px;
+  }
+}
 
 /* ---- shared layout ------------------------------------------------------------ */
 
 .landing {
   overflow-x: clip;
+  /* landscape phones: keep text clear of the notch */
+  padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
 }
 .l-section {
   position: relative;

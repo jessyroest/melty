@@ -12,8 +12,10 @@ import {
   OWNER_RE,
   RATE_BURST,
   RATE_PER_SEC,
+  ROOM_BURST,
+  ROOM_RATE_PER_SEC,
 } from "./protocol";
-import { REJECT_HEADER, send, trySend } from "./ws";
+import { CREATE_HEADER, OWNER_HEADER, REJECT_HEADER, send, trySend, upgraded } from "./ws";
 
 /**
  * Per-socket state. Lives on the socket (survives hibernation), never in storage.
@@ -37,6 +39,14 @@ type Attachment = {
  * nothing but `expiresAt` (and, after expiry, a `goneUntil` tombstone).
  */
 export class Room extends DurableObject<Env> {
+  /**
+   * The room's message budget, shared by every socket. Memory only, never stored:
+   * hibernation or eviction resets it to a full bucket, which costs nothing, because
+   * the object only hibernates after a quiet spell long enough to refill it anyway.
+   */
+  private budget = ROOM_BURST;
+  private budgetAt = Date.now();
+
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     // keepalive pings are answered by the runtime without waking the object
@@ -47,13 +57,15 @@ export class Room extends DurableObject<Env> {
     const forced = request.headers.get(REJECT_HEADER);
     if (forced !== null) return this.reject(isErrorCode(forced) ? forced : "bad");
 
-    const url = new URL(request.url);
-    const create = url.searchParams.get("create");
-    // the worker has validated `owner`: the creator sends the hash of its secret
-    const ownerParam = url.searchParams.get("owner") ?? undefined;
+    // set (and validated) by the worker only, from the client's subprotocol offer
+    const create = request.headers.get(CREATE_HEADER);
+    // the creator sends the hash of its secret
+    const ownerParam = request.headers.get(OWNER_HEADER) ?? undefined;
     const now = Date.now();
     let creating = false;
-    let { expiresAt, goneUntil } = await this.load();
+    const loaded = await this.load();
+    const goneUntil = loaded.goneUntil;
+    let expiresAt = loaded.expiresAt;
 
     if (goneUntil !== undefined) {
       if (now < goneUntil) return this.reject("gone");
@@ -98,7 +110,7 @@ export class Room extends DurableObject<Env> {
     const n = peers.length + 1;
     send(server, { t: "hello", now, expiresAt, ttl, n, locked });
     for (const p of peers) send(p, { t: "presence", n });
-    return new Response(null, { status: 101, webSocket: client });
+    return upgraded(client!);
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
@@ -127,6 +139,15 @@ export class Room extends DurableObject<Env> {
     }
     att.tokens -= 1;
     ws.serializeAttachment(att);
+
+    // and the room's shared budget: many sockets each under their own limit can't add up to a flood
+    this.budget = Math.min(ROOM_BURST, this.budget + ((now - this.budgetAt) / 1000) * ROOM_RATE_PER_SEC);
+    this.budgetAt = now;
+    if (this.budget < 1) {
+      send(ws, { t: "error", code: "rate" });
+      return;
+    }
+    this.budget -= 1;
 
     if (message.length > MAX_FRAME_CHARS) {
       send(ws, { t: "error", code: "too_big" });
@@ -221,7 +242,7 @@ export class Room extends DurableObject<Env> {
     this.ctx.acceptWebSocket(server, [REJECTED]);
     send(server, { t: "error", code });
     server.close(CLOSE[code], code);
-    return new Response(null, { status: 101, webSocket: client });
+    return upgraded(client!);
   }
 
   private announcePresence(leavingId: string | undefined): void {

@@ -2,6 +2,7 @@ import { MAX_PLAINTEXT_BYTES } from "@relay/protocol";
 import { type CSSProperties, useLayoutEffect, useRef, useState } from "react";
 import { encodedSize, MAX_NICK } from "../crypto/message";
 import type { useStore, View } from "../state/session";
+import { isolate } from "./RoomBubble";
 import { nickHue, RoomCube } from "./RoomCube";
 import { CheckIcon, FlameIcon, PencilIcon, SendIcon } from "./RoomIcons";
 
@@ -33,6 +34,12 @@ export function RoomComposer({ view, session }: { view: View; session: SessionAp
     const el = ta.current;
     if (!el) return;
     el.style.height = "auto";
+    // empty: one line, even if the placeholder would wrap on a narrow phone
+    if (!text) {
+      el.style.height = "";
+      el.style.overflowY = "hidden";
+      return;
+    }
     const h = el.scrollHeight;
     el.style.height = `${Math.min(h, MAX_HEIGHT)}px`;
     el.style.overflowY = h > MAX_HEIGHT ? "auto" : "hidden";
@@ -59,6 +66,15 @@ export function RoomComposer({ view, session }: { view: View; session: SessionAp
         <Typing who={view.typing} />
         <span className="composer__keys mono" aria-hidden="true">
           <kbd>enter</kbd> send · <kbd>shift</kbd>+<kbd>enter</kbd> new line
+        </span>
+        {burn && (
+          <span className="r-burnnote" aria-hidden="true">
+            <FlameIcon />
+            burns after reading · best effort
+          </span>
+        )}
+        <span id="burn-caveat" className="sr-only">
+          best effort: the reader can still take a screenshot
         </span>
         {nearLimit && (
           <span id="msg-size" className={`r-bytes mono${over ? " r-bytes--over" : ""}`}>
@@ -110,7 +126,8 @@ export function RoomComposer({ view, session }: { view: View; session: SessionAp
           type="button"
           aria-pressed={burn}
           aria-label="burn after reading"
-          title={burn ? "burn after reading: on" : "burn after reading"}
+          aria-describedby="burn-caveat"
+          title={`burn after reading${burn ? ": on" : ""} · best effort: the reader can still take a screenshot`}
           onClick={() => setBurn((b) => !b)}
         >
           <FlameIcon />
@@ -133,14 +150,19 @@ export function RoomComposer({ view, session }: { view: View; session: SessionAp
 
 /** "quiet-otter is typing…", built from encrypted typing notices */
 function Typing({ who }: { who: string[] }) {
+  // nicknames are isolated, so a right-to-left trick in one can't flip the sentence around it
   const text =
-    who.length === 0
-      ? ""
-      : who.length === 1
-        ? `${who[0]} is typing`
-        : who.length === 2
-          ? `${who[0]} and ${who[1]} are typing`
-          : `${who.length} people are typing`;
+    who.length === 0 ? null : who.length === 1 ? (
+      <>
+        <bdi>{who[0]}</bdi> is typing
+      </>
+    ) : who.length === 2 ? (
+      <>
+        <bdi>{who[0]}</bdi> and <bdi>{who[1]}</bdi> are typing
+      </>
+    ) : (
+      `${who.length} people are typing`
+    );
   return (
     <span className={`r-typing${text ? " is-on" : ""}`} aria-live="polite">
       {text && (
@@ -150,7 +172,7 @@ function Typing({ who }: { who: string[] }) {
             <i />
             <i />
           </span>
-          {text}
+          <span className="r-typing__text">{text}</span>
         </>
       )}
     </span>
@@ -230,10 +252,10 @@ function NickChip({ nick, onSave }: { nick: string; onSave: (nick: string) => vo
         open.current = true;
         setEditing(true);
       }}
-      aria-label={`your nickname is ${nick}. change it`}
+      aria-label={`your nickname is ${isolate(nick)}. change it`}
     >
       <RoomCube size={20} />
-      <span className="r-nick__name">{nick}</span>
+      <bdi className="r-nick__name">{nick}</bdi>
       <PencilIcon className="r-nick__pen" />
     </button>
   );

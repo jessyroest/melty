@@ -552,6 +552,13 @@
   text-decoration: none;
   text-underline-offset: 4px;
 }
+@media (pointer: coarse) {
+  .l-footer__nav a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}
 .l-footer__nav a:hover,
 .l-footer__nav a:focus-visible {
   color: var(--accent);

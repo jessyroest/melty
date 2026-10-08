@@ -6,14 +6,25 @@
     "dev": "pnpm -r --parallel --stream dev",
     "build": "pnpm --filter @melty/web build",
     "test": "pnpm -r test",
+    "lint": "eslint .",
+    "typecheck": "pnpm -r typecheck",
     "check:bundle": "node scripts/check-bundle.mjs",
     "check:logs": "node scripts/check-relay-logs.mjs",
     "e2e": "node scripts/e2e-smoke.mjs",
     "e2e:features": "node scripts/e2e-features.mjs",
+    "e2e:xss": "node scripts/e2e-xss.mjs",
+    "e2e:resilience": "node scripts/e2e-resilience.mjs",
     "deploy:share": "node scripts/deploy-share.mjs",
-    "check": "pnpm test && pnpm build && pnpm check:bundle && pnpm check:logs"
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm check:bundle && pnpm check:logs"
   },
   "devDependencies": {
-    "playwright-core": "^1.64.0"
+    "@eslint/js": "10.0.1",
+    "eslint": "10.12.0",
+    "eslint-plugin-jsx-a11y": "6.10.2",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.13.0",
+    "playwright-core": "1.64.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.1"
   }
 }

@@ -14,9 +14,14 @@ export function JoinDialog({ onClose }: { onClose: () => void }) {
   const [tries, setTries] = useState(0);
 
   async function join() {
-    const raw = value.trim();
-    const fragment = raw.includes("#") ? raw.slice(raw.indexOf("#") + 1) : raw;
+    // read the DOM value and empty the field right away, before anything else happens: a browser
+    // that remembers form entries (Edge does, even with autocomplete="off") finds nothing to keep
+    const el = input.current;
+    const raw = (el?.value ?? value).trim();
+    if (!raw) return;
+    if (el) el.value = "";
     setValue("");
+    const fragment = raw.includes("#") ? raw.slice(raw.indexOf("#") + 1) : raw;
     if (await joinFromFragment(fragment)) {
       onClose();
       navigate("/r");
@@ -48,13 +53,8 @@ export function JoinDialog({ onClose }: { onClose: () => void }) {
       <p className="sheet__lead">
         paste the link someone sent you. it stays in this tab and is cleared from the field right away.
       </p>
-      <form
-        className="joinform"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void join();
-        }}
-      >
+      {/* deliberately not a <form>: a submit event is what browsers hook to save field values */}
+      <div className="joinform">
         <label className="field">
           <span className="field__label">room link</span>
           <span key={tries} className={`joinform__box${error ? " is-wrong" : ""}`}>
@@ -70,6 +70,13 @@ export function JoinDialog({ onClose }: { onClose: () => void }) {
               placeholder={`${location.host}/r#…`}
               autoComplete="off"
               spellCheck={false}
+              enterKeyHint="go"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  void join();
+                }
+              }}
               aria-invalid={error ? true : undefined}
               aria-describedby={error ? "join-error" : undefined}
             />
@@ -80,10 +87,10 @@ export function JoinDialog({ onClose }: { onClose: () => void }) {
             {error}
           </p>
         )}
-        <button className="btn btn--primary joinform__go" type="submit" disabled={!value.trim()}>
+        <button className="btn btn--primary joinform__go" type="button" onClick={() => void join()} disabled={!value.trim()}>
           join
         </button>
-      </form>
+      </div>
     </dialog>
   );
 }

@@ -181,9 +181,9 @@ function Group({ item, actions }: { item: Extract<Item, { type: "group" }>; acti
       {!mine && <RoomCube size={30} className="r-msgs__avatar" />}
       <div className="r-msgs__col">
         {!mine && (
-          <span className="r-msgs__nick" aria-hidden="true">
+          <bdi className="r-msgs__nick" aria-hidden="true">
             {nick}
-          </span>
+          </bdi>
         )}
         {lines.map((l) => (
           <Bubble key={l.id} line={l} nick={nick} mine={mine} actions={actions} />
@@ -196,13 +196,43 @@ function Group({ item, actions }: { item: Extract<Item, { type: "group" }>; acti
   );
 }
 
+/** the nicknames in a notice are someone else's text: isolate them so bidi tricks stay inside */
+function sysText(line: Line) {
+  const { text: t, nick } = line;
+  if (!nick) return t;
+  if (t === `${nick} joined` || t === `${nick} left`) {
+    return (
+      <>
+        <bdi>{nick}</bdi>
+        {t.slice(nick.length)}
+      </>
+    );
+  }
+  if (t === `you're ${nick} now`) {
+    return (
+      <>
+        you're <bdi>{nick}</bdi> now
+      </>
+    );
+  }
+  const tail = ` is now ${nick}`;
+  if (t.endsWith(tail)) {
+    return (
+      <>
+        <bdi>{t.slice(0, -tail.length)}</bdi> is now <bdi>{nick}</bdi>
+      </>
+    );
+  }
+  return <bdi>{t}</bdi>;
+}
+
 function SystemLine({ line }: { line: Line }) {
   const t = line.text;
-  const kind = t.startsWith("the room is")
+  const kind = !line.nick && t.startsWith("the room is")
     ? "lock"
-    : t.endsWith(" joined")
+    : t === `${line.nick} joined`
       ? "join"
-      : t.endsWith(" left")
+      : t === `${line.nick} left`
         ? "leave"
         : "nick";
   return (
@@ -210,7 +240,7 @@ function SystemLine({ line }: { line: Line }) {
       <span className="r-sys__glyph" aria-hidden="true">
         {kind === "join" ? "+" : kind === "leave" ? "−" : kind === "lock" ? "🔒" : "✎"}
       </span>
-      {t}
+      <span className="r-sys__text">{sysText(line)}</span>
     </p>
   );
 }

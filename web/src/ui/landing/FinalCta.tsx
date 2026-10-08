@@ -354,7 +354,7 @@ export function Footer() {
             back to top
           </a>
         </nav>
-        <p className="mono l-footer__promise">no cookies · no analytics · no logs</p>
+        <p className="mono l-footer__promise">no cookies · no analytics · the relay keeps no logs</p>
         <p className="mono l-footer__clock">
           <span aria-hidden="true">{cubeLine(secs)} </span>
           <span className="l-footer__hint">{secs >= 20 ? "click the cube to refreeze." : ""}</span>

@@ -18,7 +18,7 @@
     // /, /r and /how all get index.html; security headers come from dist-share/_headers
     "not_found_handling": "single-page-application",
     // WebSocket upgrades must reach the relay code, never the asset server
-    "run_worker_first": ["/rooms/*"]
+    "run_worker_first": ["/ws"]
   },
   "durable_objects": {
     "bindings": [

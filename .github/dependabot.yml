@@ -1,0 +1,29 @@
+# Dependabot version updates.
+# pnpm workspace: Dependabot reads pnpm-workspace.yaml from the root, so directory "/"
+# covers the root, web/ and relay/ package.json files and the single pnpm-lock.yaml.
+# Listing web/ and relay/ separately would produce duplicate PRs for the shared lockfile.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+    groups:
+      # All minor and patch bumps in one weekly PR; major bumps get their own PR each.
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions:
+        patterns: ["*"]

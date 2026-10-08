@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Deploy a shareable copy of melty to Cloudflare Workers: one public HTTPS
 // origin (https://melty.<subdomain>.workers.dev) that serves the web app as
-// static assets and runs the relay on /rooms/<id>/ws.
+// static assets and runs the relay on /ws (room id etc. in Sec-WebSocket-Protocol).
 //
 //   pnpm deploy:share                  # with `wrangler login` / CLOUDFLARE_API_TOKEN
 //   pnpm deploy:share -- --temporary   # no login: 60-minute temporary account

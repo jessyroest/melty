@@ -25,13 +25,34 @@ export const GONE_MARGIN_MS = 24 * 60 * 60 * 1000;
 
 export const CREATE_LIMIT_PER_HOUR = 20;
 
+/** WebSocket connection attempts per IP (joins, creates, reconnects): a token bucket, 60 per minute with a burst of 60 */
+export const CONNECT_PER_MIN = 60;
+export const CONNECT_BURST = 60;
+
+/** a room's message budget, shared by all its sockets (in the room object's memory only) */
+export const ROOM_RATE_PER_SEC = 20;
+export const ROOM_BURST = 20;
+
+/**
+ * Transport. The client connects to the fixed path `/ws`; nothing about the room
+ * travels in the URL. Everything goes in the `Sec-WebSocket-Protocol` header,
+ * as HTTP tokens (base64url and `.` are token characters):
+ *   melty.v1, r.<roomId>[, c.<ttl>][, o.<ownerHash>]
+ * The relay's 101 response always selects exactly `melty.v1`.
+ */
+export const WS_PATH = "/ws";
+export const SUBPROTOCOL = "melty.v1";
+export const PROTO_ROOM = "r.";
+export const PROTO_CREATE = "c.";
+export const PROTO_OWNER = "o.";
+
 /** roomId = 32 bytes, base64url */
 export const ROOM_ID_RE = /^[A-Za-z0-9_-]{43}$/;
 export const B64URL_RE = /^[A-Za-z0-9_-]*$/;
 /** the creator's proof: a 32-byte secret (base64url); the relay only ever learns its SHA-256 until it's used */
 export const OWNER_RE = /^[A-Za-z0-9_-]{43}$/;
 
-export type ErrorCode = "bad" | "not_found" | "gone" | "full" | "too_big" | "rate" | "limit" | "locked";
+export type ErrorCode = "bad" | "not_found" | "gone" | "full" | "too_big" | "rate" | "limit" | "slow" | "locked";
 
 export const CLOSE = {
   expired: 4001,
@@ -44,6 +65,8 @@ export const CLOSE = {
   too_big: 4013,
   rate: 4029,
   limit: 4030,
+  /** too many connection attempts from one address */
+  slow: 4031,
 } as const;
 
 export type ClientFrame =

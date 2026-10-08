@@ -106,8 +106,10 @@ try {
   if (SHOTS) await c.page.screenshot({ path: `${SHOTS}/home.png` });
 
   const foreign = requests.filter((u) => {
-    const o = new URL(u).origin;
-    return o !== new URL(WEB).origin && o !== RELAY;
+    const url = new URL(u);
+    // the Vite dev server's own hot-reload socket only exists in dev
+    if (url.protocol === "ws:" && url.host === new URL(WEB).host && url.searchParams.has("token")) return false;
+    return url.origin !== new URL(WEB).origin && url.origin !== RELAY;
   });
   check(foreign.length === 0, `no requests outside ${new URL(WEB).origin} and ${RELAY}${foreign.length ? `: ${foreign.join(", ")}` : ""}`);
   check(violations.length === 0, `no CSP violations${violations.length ? `: ${violations.join(" | ")}` : ""}`);

@@ -1,6 +1,6 @@
 import { env, runInDurableObject } from "cloudflare:test";
 import { exports } from "cloudflare:workers";
-import type { ServerFrame } from "../src/protocol";
+import { type ServerFrame, SUBPROTOCOL, WS_PATH } from "../src/protocol";
 
 export const ORIGIN = "http://localhost:5173";
 
@@ -11,22 +11,34 @@ export function randomRoomId(): string {
 
 export type Conn = {
   ws: WebSocket;
+  /** the 101 response */
+  res: Response;
   next(): Promise<ServerFrame>;
   queue: ServerFrame[];
   closed: Promise<{ code: number }>;
   send(frame: unknown): void;
 };
 
-export async function connect(
-  roomId: string,
-  opts: {
-    create?: number | string;
-    owner?: string;
-    origin?: string | null;
-    ip?: string;
-    headers?: Record<string, string>;
-  } = {},
-): Promise<Conn> {
+type ConnectOpts = {
+  create?: number | string;
+  owner?: string;
+  origin?: string | null;
+  /** client address; defaults to a fresh random one per call, so the per-IP limits only bite where a test means them to */
+  ip?: string;
+  /** the raw Sec-WebSocket-Protocol header, replacing the one built from roomId/create/owner (null: none) */
+  protocol?: string | null;
+  headers?: Record<string, string>;
+};
+
+/** the subprotocol offer a browser client sends: melty.v1, r.<roomId>[, c.<ttl>][, o.<hash>] */
+export function offer(roomId: string, opts: { create?: number | string; owner?: string } = {}): string {
+  const parts = [SUBPROTOCOL, `r.${roomId}`];
+  if (opts.create !== undefined) parts.push(`c.${opts.create}`);
+  if (opts.owner !== undefined) parts.push(`o.${opts.owner}`);
+  return parts.join(", ");
+}
+
+export async function connect(roomId: string, opts: ConnectOpts = {}): Promise<Conn> {
   const res = await rawFetch(roomId, opts);
   const ws = res.webSocket;
   if (!ws) throw new Error(`no websocket, status ${res.status}`);
@@ -42,6 +54,7 @@ export async function connect(
   const closed = new Promise<{ code: number }>((r) => ws.addEventListener("close", (e) => r({ code: e.code })));
   return {
     ws,
+    res,
     queue,
     closed,
     next: () => (queue.length ? Promise.resolve(queue.shift()!) : new Promise((r) => waiters.push(r))),
@@ -51,25 +64,20 @@ export async function connect(
 
 export function rawFetch(
   roomId: string,
-  opts: {
-    create?: number | string;
-    owner?: string;
-    origin?: string | null;
-    ip?: string;
-    upgrade?: boolean;
-    path?: string;
-    headers?: Record<string, string>;
-  } = {},
+  opts: ConnectOpts & { upgrade?: boolean; path?: string } = {},
 ): Promise<Response> {
-  const params = new URLSearchParams();
-  if (opts.create !== undefined) params.set("create", String(opts.create));
-  if (opts.owner !== undefined) params.set("owner", opts.owner);
-  const q = params.size ? `?${params}` : "";
   const headers: Record<string, string> = { ...opts.headers };
   if (opts.upgrade !== false) headers.Upgrade = "websocket";
   if (opts.origin !== null) headers.Origin = opts.origin ?? ORIGIN;
-  if (opts.ip) headers["CF-Connecting-IP"] = opts.ip;
-  return (exports as unknown as { default: Fetcher }).default.fetch(`https://relay.test${opts.path ?? `/rooms/${roomId}/ws`}${q}`, { headers });
+  headers["CF-Connecting-IP"] = opts.ip ?? randomIp();
+  const protocol = opts.protocol === undefined ? offer(roomId, opts) : opts.protocol;
+  if (protocol !== null) headers["Sec-WebSocket-Protocol"] = protocol;
+  return (exports as unknown as { default: Fetcher }).default.fetch(`https://relay.test${opts.path ?? WS_PATH}`, { headers });
+}
+
+export function randomIp(): string {
+  const b = crypto.getRandomValues(new Uint8Array(4));
+  return `10.${b[0]}.${b[1]}.${b[2]}`;
 }
 
 export const tick = (ms = 50) => new Promise((r) => setTimeout(r, ms));

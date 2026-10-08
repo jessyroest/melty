@@ -6,7 +6,7 @@
 
 <!-- Commands you ran and what you checked by hand. Delete what doesn't apply. -->
 
-- [ ] `pnpm check` (test + build + check:bundle + check:logs)
+- [ ] `pnpm check` (lint + typecheck + test + build + check:bundle + check:logs), with 0 lint errors and no new lint warnings
 - [ ] `pnpm e2e` and `pnpm e2e:features` against the relay + `web preview`
 - [ ] Manually in the production-like setup (`pnpm build`, relay dev, `web preview` on :4173)
 - Browser(s) used:
