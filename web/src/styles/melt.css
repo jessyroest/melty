@@ -1,58 +1,341 @@
 /* ---- sticky melt --------------------------------------------------------------------- */
+/* MeltScroll sets --p (scroll 0..1), --t (melt 0..1) and --q (quiet 0..1) on .l-melt */
 
 .l-melt {
+  --p: 0;
+  --t: 0;
+  --q: 0;
+  --warm: rgba(255, 150, 70, 0.2);
+  --warm-edge: rgba(255, 180, 110, 0.32);
+  --hush: rgba(4, 7, 18, 0.45);
+  --water-top: rgba(127, 231, 242, 0.42);
+  --water-body: rgba(127, 231, 242, 0.14);
+  --drip: #9feef6;
+  --bubble-them: rgba(170, 225, 255, 0.12);
   position: relative;
-  height: 340vh;
+  height: 360vh;
 }
+@media (prefers-color-scheme: light) {
+  .l-melt {
+    --warm: rgba(255, 150, 60, 0.18);
+    --warm-edge: rgba(220, 120, 40, 0.3);
+    --hush: rgba(200, 212, 224, 0.4);
+    --water-top: rgba(10, 126, 149, 0.32);
+    --water-body: rgba(63, 190, 214, 0.16);
+    --drip: #3fbed6;
+    --bubble-them: rgba(11, 21, 48, 0.07);
+  }
+}
+
 .l-melt__sticky {
   position: sticky;
   top: 0;
   height: 100svh;
   max-width: 1200px;
   margin: 0 auto;
-  padding: 72px 16px 24px;
+  padding: 72px 16px 18px;
   display: grid;
-  grid-template-rows: 1fr auto;
-  align-items: center;
-  gap: 12px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 14px;
 }
+
+/* ---- the stage ------------------------------------------------------------------------ */
+
 .l-melt__stage {
+  --shelf: 25; /* % of the stage height, from the bottom */
+  --level: calc(5 + 14 * var(--t)); /* water level, same unit */
+  --cube: min(300px, 58cqw, 37cqh);
   position: relative;
-  height: 100%;
   min-height: 0;
-  display: grid;
-  place-items: center;
   overflow: hidden;
+  container-type: size;
   border-radius: 28px;
   border: 1px solid var(--line);
-  background: radial-gradient(60% 60% at 50% 60%, var(--glow), transparent 70%);
+  background: radial-gradient(60% 55% at 50% 58%, var(--glow), transparent 70%), var(--bg-deep);
+  isolation: isolate;
 }
+/* the room warms up as time runs out, then cools to nothing */
+.l-melt__warm,
+.l-melt__hush {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.l-melt__warm {
+  background: radial-gradient(90% 70% at 50% 100%, var(--warm), transparent 70%),
+    radial-gradient(120% 90% at 50% 0%, transparent 55%, var(--warm-edge));
+  opacity: calc(var(--t) * var(--t) * (1 - var(--q)));
+}
+.l-melt__hush {
+  background: var(--hush);
+  opacity: var(--q);
+}
+
 .l-melt__clock {
   position: absolute;
+  z-index: 2;
   top: 14px;
   left: 18px;
   margin: 0;
   font-size: clamp(2.2rem, 7vw, 5rem);
   font-weight: 700;
-  color: var(--accent);
+  line-height: 1.1;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.04em;
+  color: color-mix(
+    in srgb,
+    var(--muted) calc(var(--q) * 100%),
+    color-mix(in srgb, var(--warn-text) calc(var(--t) * var(--t) * 100%), var(--accent))
+  );
+}
+
+/* ---- the chat that melts away --------------------------------------------------------- */
+
+.l-melt__chat {
+  position: absolute;
+  z-index: 1;
+  top: 17%;
+  left: 7%;
+  right: 7%;
+  bottom: calc(var(--shelf) * 1% + var(--cube) * 0.66 + 10px);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.l-melt__bubble {
+  --in: clamp(0, (var(--p) - var(--a)) / 0.035, 1);
+  --out: clamp(0, (var(--t) - var(--b)) / 0.14, 1);
+  position: relative;
+  align-self: flex-start;
+  max-width: 78%;
+  padding: 6px 12px;
+  border-radius: 14px 14px 14px 5px;
+  font-size: clamp(0.78rem, 2.6cqw, 1rem);
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--text);
+  background: var(--bubble-them);
+  border: 1px solid var(--line);
+  transform-origin: 50% 0;
+  opacity: calc(var(--in) * (1 - var(--out)));
+  transform: translateY(calc((1 - var(--in)) * 10px + var(--out) * var(--out) * 26px))
+    scale(calc(0.92 + var(--in) * 0.08 - var(--out) * 0.1), calc(0.92 + var(--in) * 0.08 + var(--out) * 0.45));
+}
+.l-melt__bubble.is-me {
+  align-self: flex-end;
+  border-radius: 14px 14px 5px 14px;
+  background: var(--bubble-mine);
+  color: var(--text);
+}
+/* a drip that grows under the bubble while it melts */
+.l-melt__bubble::after {
+  content: "";
+  position: absolute;
+  left: 30%;
+  top: calc(100% - 2px);
+  width: 7px;
+  height: 14px;
+  border-radius: 0 0 999px 999px;
+  background: inherit;
+  transform-origin: 50% 0;
+  transform: scaleY(calc(var(--out) * 1.6));
+}
+.l-melt__bubble.is-me::after {
+  left: auto;
+  right: 26%;
+}
+.l-melt__gone {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  top: 34%;
+  margin: 0;
+  text-align: center;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  opacity: var(--q);
+}
+
+/* ---- the cube on its shelf ------------------------------------------------------------ */
+
+.l-melt__cube {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  bottom: calc(var(--shelf) * 1% - var(--cube) * 0.12);
+  width: var(--cube);
+  height: var(--cube);
+  transform: translateX(-50%);
+}
+.l-melt__mascot,
+.l-melt__mascot .live-mascot {
+  display: block;
 }
 .l-melt__mascot svg {
-  width: min(64vw, 340px);
-  max-height: 46svh;
-  height: auto;
+  display: block;
+  width: var(--cube);
+  height: var(--cube);
 }
+/* the scroll drives the melt, so don't let the mascot's own transitions lag behind it */
+.l-melt__mascot .mascot__body,
+.l-melt__mascot .mascot__puddle,
+.l-melt__mascot .mascot__face {
+  transition-duration: 120ms;
+}
+.l-melt__shelf {
+  position: absolute;
+  left: 4%;
+  right: 4%;
+  top: 88%;
+  height: 7px;
+  border-radius: 0 0 6px 6px;
+  background: linear-gradient(var(--panel-border), var(--panel));
+  box-shadow: 0 10px 24px -12px var(--glow);
+}
+
+/* drips run off the shelf edges and fall into the water */
+.l-melt__drip {
+  position: absolute;
+  left: calc(50% + var(--x) * 1%);
+  top: calc(88% + 4px);
+  width: 0;
+  /* from the shelf to the water surface */
+  height: calc((var(--shelf) - var(--level)) * 1cqh - 4px);
+  opacity: calc(clamp(0, (var(--t) - var(--th)) * 14, 1) * (1 - var(--q)));
+}
+.l-melt__drip-fall {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  animation: l-drip-fall var(--dur) cubic-bezier(0.55, 0, 0.9, 0.5) var(--delay) infinite;
+}
+.l-melt__drip-fall i {
+  position: absolute;
+  left: -5px;
+  top: -7px;
+  width: 10px;
+  height: 10px;
+  border-radius: 0 50% 50% 50%;
+  background: var(--drip);
+  transform: rotate(45deg);
+  animation: l-drip-form var(--dur) ease-in var(--delay) infinite;
+}
+@keyframes l-drip-fall {
+  0%,
+  42% {
+    transform: translateY(0);
+  }
+  88%,
+  100% {
+    transform: translateY(100%);
+  }
+}
+@keyframes l-drip-form {
+  0% {
+    transform: rotate(45deg) scale(0.2);
+    opacity: 1;
+  }
+  40% {
+    transform: rotate(45deg) scale(1);
+  }
+  52% {
+    transform: rotate(45deg) scale(0.85, 1.25);
+  }
+  86% {
+    opacity: 1;
+  }
+  88%,
+  100% {
+    transform: rotate(45deg) scale(1);
+    opacity: 0;
+  }
+}
+
+/* ---- the water rises -------------------------------------------------------------------- */
+
 .l-melt__water {
   position: absolute;
+  z-index: 2;
   left: 0;
   right: 0;
   bottom: 0;
-  height: 26%;
-  transform-origin: bottom;
-  background: linear-gradient(to top, var(--puddle), transparent);
-  opacity: 0.45;
+  height: 100%;
+  transform: translateY(calc((100 - var(--level)) * 1%));
+  background: linear-gradient(var(--water-top), var(--water-body) 14%, transparent 60%);
   pointer-events: none;
+}
+.l-melt__wave {
+  position: absolute;
+  left: 0;
+  top: -11px;
+  width: 200%;
+  height: 12px;
+  fill: var(--water-top);
+  animation: l-wave 5s linear infinite;
+}
+.l-melt__wave--back {
+  top: -14px;
+  opacity: 0.5;
+  animation-duration: 8s;
+  animation-direction: reverse;
+}
+@keyframes l-wave {
+  to {
+    transform: translateX(-50%);
+  }
+}
+.l-melt__stage.is-quiet .l-melt__wave {
+  animation-play-state: paused;
+}
+.l-melt__ripple {
+  position: absolute;
+  left: calc(50% + var(--cube) * var(--x) / 100 - 16px);
+  top: -5px;
+  width: 32px;
+  height: 8px;
+  border-radius: 50%;
+  /* only ripple while its drip is falling */
+  border: 2px solid
+    color-mix(in srgb, var(--drip) calc(clamp(0, (var(--t) - var(--th)) * 14, 1) * (1 - var(--q)) * 100%), transparent);
+  opacity: 0;
+  animation: l-ripple var(--dur) linear var(--delay) infinite;
+}
+@keyframes l-ripple {
+  0%,
+  86% {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+  89% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+/* ---- the step text ---------------------------------------------------------------------- */
+
+.l-melt__side {
+  display: grid;
+  gap: 12px;
+}
+.l-melt__bar {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.l-melt__bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: 0 50%;
 }
 .l-melt__steps {
   list-style: none;
@@ -62,7 +345,7 @@
 }
 .l-melt__steps li {
   grid-area: 1 / 1;
-  font-size: clamp(1.15rem, 2.4vw, 1.6rem);
+  font-size: clamp(1.1rem, 2.4vw, 1.6rem);
   font-weight: 600;
   line-height: 1.3;
   opacity: 0;
@@ -80,6 +363,7 @@
   opacity: 1;
   transform: none;
 }
+
 @media (min-width: 900px) {
   .l-melt__sticky {
     grid-template-rows: none;
@@ -87,6 +371,12 @@
     gap: 56px;
     padding-top: 96px;
     padding-bottom: 48px;
+  }
+  .l-melt__side {
+    align-content: center;
+  }
+  .l-melt__bar {
+    display: none;
   }
   .l-melt__steps {
     display: block;
@@ -103,5 +393,35 @@
   .l-melt__steps li.is-active {
     opacity: 1;
     transform: translateX(8px);
+  }
+}
+
+/* ---- reduced motion: the states follow the scroll, nothing moves on its own ------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .l-melt__drip,
+  .l-melt__ripple {
+    display: none;
+  }
+  .l-melt__wave {
+    animation: none;
+  }
+  .l-melt__bubble {
+    transform: none;
+  }
+  .l-melt__bubble::after {
+    display: none;
+  }
+  .l-melt__mascot .mascot__wisp {
+    animation: none;
+    opacity: 0.6;
+  }
+  .l-melt__mascot .mascot__drip {
+    animation: none;
+  }
+  .l-melt__steps li,
+  .l-melt__steps li.is-active {
+    transition: none;
+    transform: none;
   }
 }

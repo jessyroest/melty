@@ -45,7 +45,7 @@ try {
   const a = await person();
   await a.page.goto(WEB);
   await a.page.getByLabel("10 min").check();
-  await a.page.getByRole("button", { name: "open a room" }).click();
+  await a.page.locator("#start").getByRole("button", { name: "open a room" }).click();
   const dialog = a.page.getByRole("dialog");
   await dialog.waitFor();
   const link = await dialog.getByRole("textbox", { name: "room link" }).inputValue();
@@ -100,7 +100,7 @@ try {
   check(true, "a link to a room that doesn't exist is refused");
 
   await c.page.goto(`${WEB}/how`);
-  await c.page.getByRole("heading", { name: "what it does not protect against" }).waitFor();
+  await c.page.getByRole("heading", { name: "does not protect against" }).waitFor();
   if (SHOTS) await c.page.screenshot({ path: `${SHOTS}/how.png`, fullPage: true });
   await c.page.goto(WEB);
   if (SHOTS) await c.page.screenshot({ path: `${SHOTS}/home.png` });

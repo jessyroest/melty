@@ -1,77 +1,331 @@
-/* ---- things melty never asks for ------------------------------------------------- */
+/* ---- things melty never asks for --------------------------------------------------- */
+/* each .nv-line gets --m (0 = frozen, 1 = melted) from scroll; everything else is derived */
 
 .l-never {
   display: grid;
-  gap: 40px;
+  padding-top: clamp(32px, 7vh, 72px);
+  padding-bottom: clamp(24px, 6vh, 72px);
 }
-.l-never__list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
+.nv-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
 }
-.melt-line {
+.l-never__intro .lead {
+  margin-bottom: 0;
+}
+
+/* the list is pinned while the track scrolls past */
+.nv-track {
   position: relative;
-  font-size: clamp(2.1rem, 6.4vw, 4.6rem);
+  height: 300svh;
+}
+.nv-stick {
+  --nv-fs: min(clamp(2.2rem, 9.4vw, 4.6rem), 7.2svh);
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 76px 0 20px;
+}
+.nv-label {
+  margin: 0 0 clamp(14px, 3vh, 28px);
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.nv-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: var(--nv-fs);
+}
+
+/* ---- one line ------------------------------------------------------------------------- */
+
+.nv-line {
+  --m: 0;
+  --base: 0.97em; /* where the letters sit, measured from the top of the line */
+  --pool: 1.56em; /* where the puddle forms */
+  position: relative;
   font-weight: 700;
   letter-spacing: -0.04em;
   line-height: 1.12;
+  padding-bottom: 0.56em;
+  white-space: nowrap;
 }
-.melt-ch {
+.nv-melt {
+  position: relative;
+  display: inline-block;
+  isolation: isolate;
+}
+/* behind the letters, so drips seem to come out of them */
+.nv-goo {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+  filter: url(#nv-goo);
+}
+.nv-ch {
+  display: inline-block;
+}
+.nv-ch--sp {
+  width: 0.27em;
+}
+.nv-glyph {
+  --c: clamp(0, (var(--m) - var(--o)) / 0.6, 1);
+  --sag: clamp(0, var(--c) * 2.4, 1); /* bottoms stretch down into drips */
+  --slump: clamp(0, (var(--c) - 0.3) / 0.7, 1); /* then the letter sinks into the puddle */
   display: inline-block;
   transform-origin: 50% 0;
+  transform: translate(calc(var(--x) * var(--c)), calc(var(--slump) * var(--slump) * 0.8em))
+    rotate(calc(var(--r) * var(--sag) * (1 - var(--slump))))
+    scale(calc(1 - var(--sag) * 0.08 + var(--slump) * 0.22), calc((1 + var(--sag) * var(--s) * 0.55) * (1 - var(--slump) * 0.55)));
+  opacity: calc(1 - clamp(0, (var(--c) - 0.42) / 0.45, 1));
+  color: color-mix(in srgb, var(--accent) calc(clamp(0, var(--c) * 3, 1) * 100%), var(--text));
 }
-.melt-line.is-melting .melt-ch {
-  animation: melt-ch 1.8s cubic-bezier(0.55, 0, 0.75, 0.45) var(--d) forwards;
+
+.nv-goo {
+  transition: opacity 600ms ease;
 }
-@keyframes melt-ch {
-  0% {
-    transform: none;
-  }
-  35% {
-    transform: translateY(0.04em) scaleY(1.12);
-    color: var(--accent);
-  }
-  100% {
-    transform: translate(var(--x), 0.3em) scaleY(var(--s));
-    color: var(--accent);
-    opacity: 0.1;
-    filter: blur(4px);
-  }
+.nv-stick.is-landed .nv-goo {
+  opacity: 0.5;
 }
-.melt-line__puddle {
+.nv-pool {
   position: absolute;
   left: 0;
-  bottom: 0.06em;
-  height: 0.09em;
-  width: 0;
+  right: 0;
+  color: var(--accent);
+  top: var(--pool);
+  height: 0.13em;
   border-radius: 999px;
-  background: var(--accent);
-  opacity: 0;
-  filter: blur(2px);
+  background: currentColor;
+  transform-origin: 0 50%;
+  transform: scaleX(clamp(0, (var(--m) - 0.3) * 1.6, 1));
 }
-.melt-line.is-melting .melt-line__puddle {
-  animation: puddle 1.4s ease-out 900ms forwards;
-}
-@keyframes puddle {
-  to {
-    width: 70%;
-    opacity: 0.45;
-  }
-}
-.l-never__end {
-  margin: 0;
+.nv-drip {
+  --dp: clamp(0, (var(--m) - var(--o)) / 0.55, 1);
+  --g: clamp(0, var(--dp) * 3.2, 1); /* a bead swells out of the letter */
+  --a: clamp(0, (var(--dp) - 0.36) / 0.48, 1); /* it lets go and falls */
+  --snap: clamp(0, (var(--a) - 0.42) * 4, 1); /* the neck snaps back */
+  --land: clamp(0, (var(--dp) - 0.82) * 5.6, 1); /* it hits the puddle */
+  --f: calc(var(--g) * var(--len) + var(--a) * var(--a) * (1 - var(--len))); /* 0..1 of the fall */
+  --D: calc(var(--pool) - var(--base) - 0.1em);
+  position: absolute;
+  top: calc(var(--base) - 0.06em);
+  width: 0;
+  height: 0;
   color: var(--accent);
 }
+.nv-drip__neck {
+  position: absolute;
+  left: -0.075em;
+  top: 0;
+  width: 0.15em;
+  height: calc(var(--D) + 0.06em);
+  border-radius: 999px;
+  background: currentColor;
+  transform-origin: 50% 0;
+  transform: scaleY(calc(var(--f) * (1 - var(--snap))));
+}
+.nv-drip__drop {
+  position: absolute;
+  left: -0.12em;
+  top: -0.04em;
+  width: 0.24em;
+  height: 0.24em;
+  border-radius: 0 50% 50% 50%;
+  background: currentColor;
+  opacity: clamp(0, var(--dp) * 6, 1);
+  transform: translateY(calc(var(--f) * var(--D)))
+    scale(calc((0.4 + var(--g) * 0.6) * (1 + var(--land) * 0.9)), calc((0.4 + var(--g) * 0.6) * (1 - var(--land) * 0.6)))
+    rotate(45deg);
+}
+.nv-drip__blob {
+  position: absolute;
+  left: -0.3em;
+  top: calc(var(--pool) - var(--base) + 0.1em - 0.02em);
+  width: 0.6em;
+  height: 0.14em;
+  border-radius: 50%;
+  background: currentColor;
+  transform: scaleX(var(--land));
+}
+
+/* ---- the landing line ---------------------------------------------------------------- */
+
+.nv-end {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.22em;
+  margin: clamp(4px, 1.4vh, 14px) 0 0;
+  font-size: var(--nv-fs);
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  line-height: 1.1;
+  color: var(--accent);
+}
+.nv-end__words,
+.nv-end__cube {
+  display: inline-block;
+  opacity: 0;
+  transform-origin: 50% 100%;
+}
+.nv-end__cube svg {
+  display: block;
+  width: 1.05em;
+  height: 1.05em;
+}
+.nv-end.is-landed .nv-end__words {
+  animation: nv-land 880ms forwards;
+}
+.nv-end.is-landed .nv-end__cube {
+  animation: nv-land 880ms 160ms forwards;
+}
+@keyframes nv-land {
+  0% {
+    opacity: 0;
+    transform: translateY(-1.3em) scale(0.92, 1.14);
+    animation-timing-function: cubic-bezier(0.55, 0, 1, 0.5);
+  }
+  12% {
+    opacity: 1;
+  }
+  36% {
+    opacity: 1;
+    transform: translateY(0) scale(1.12, 0.8);
+    animation-timing-function: cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+  58% {
+    transform: translateY(-0.07em) scale(0.97, 1.05);
+  }
+  78% {
+    transform: translateY(0) scale(1.02, 0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* a little splash where it hits */
+.nv-end__splash {
+  position: absolute;
+  left: 3.1em;
+  bottom: 0.08em;
+  width: 0;
+  height: 0;
+}
+.nv-end__splash i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0.12em;
+  height: 0.12em;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0;
+}
+.nv-end.is-landed .nv-end__splash i {
+  animation: nv-splash 700ms cubic-bezier(0.2, 0.6, 0.4, 1) 300ms both;
+}
+.nv-end__splash i:nth-child(1) {
+  --dx: -2.4em;
+  --dy: -0.7em;
+}
+.nv-end__splash i:nth-child(2) {
+  --dx: -1.3em;
+  --dy: -1em;
+}
+.nv-end__splash i:nth-child(3) {
+  --dx: 1.4em;
+  --dy: -0.95em;
+}
+.nv-end__splash i:nth-child(4) {
+  --dx: 2.5em;
+  --dy: -0.6em;
+}
+@keyframes nv-splash {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.6);
+  }
+  15% {
+    opacity: 1;
+  }
+  55% {
+    transform: translate(calc(var(--dx) * 0.6), var(--dy)) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx), 0.1em) scale(0.5);
+  }
+}
+
+/* ---- desktop: intro pinned on the left, list on the right ---------------------------- */
+
 @media (min-width: 900px) {
   .l-never {
     grid-template-columns: 0.8fr 1.2fr;
+    column-gap: 48px;
     align-items: start;
   }
   .l-never__intro {
     position: sticky;
-    top: 120px;
+    top: 0;
+    height: 100svh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding-top: 76px;
   }
-  .l-never__end {
-    grid-column: 2;
+  .nv-stick {
+    --nv-fs: min(clamp(2.2rem, 5.6vw, 4.6rem), 7.2svh);
+  }
+}
+
+/* ---- reduced motion: same states, no movement ---------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .nv-glyph {
+    transform: none;
+    opacity: calc(1 - var(--m) * 0.65);
+  }
+  .nv-melt::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0.58em;
+    height: 0.07em;
+    border-radius: 999px;
+    background: var(--accent);
+    opacity: clamp(0, (var(--m) - 0.4) * 5, 1);
+  }
+  .nv-drip {
+    display: none;
+  }
+  .nv-goo {
+  transition: opacity 600ms ease;
+}
+.nv-stick.is-landed .nv-goo {
+  opacity: 0.5;
+}
+.nv-pool {
+    transform: none;
+    opacity: clamp(0, (var(--m) - 0.4) * 2, 1);
+  }
+  .nv-end.is-landed .nv-end__words,
+  .nv-end.is-landed .nv-end__cube {
+    animation: none;
+    opacity: 1;
+  }
+  .nv-end__splash {
+    display: none;
   }
 }

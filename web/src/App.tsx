@@ -5,7 +5,7 @@ import { Chat } from "./ui/Chat";
 import { focusStart, Home } from "./ui/Home";
 import { HowItWorks } from "./ui/HowItWorks";
 import { JoinDialog } from "./ui/JoinDialog";
-import { LiveMascot } from "./ui/LiveMascot";
+import { Logo } from "./ui/Logo";
 
 export function App() {
   const route = useRoute();
@@ -42,8 +42,7 @@ export function App() {
             }}
             aria-current={route === "/" ? "page" : undefined}
           >
-            <LiveMascot size={34} className="brand__mascot" />
-            <span>melty</span>
+            <Logo size={34} />
           </a>
           {route !== "/r" && (
             <div className="topnav__links">

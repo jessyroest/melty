@@ -1,35 +1,234 @@
-/* ---- honesty ----------------------------------------------------------------------- */
+/* ---- honesty: four cracks in one pane of ice ---------------------------------------- */
 
 .l-honest {
-  display: grid;
-  gap: 36px;
+  --crack: rgba(205, 242, 255, 0.62);
+  --crack-soft: rgba(127, 231, 242, 0.16);
+  --glare: rgba(220, 245, 255, 0.05);
 }
-.l-honest__list {
+@media (prefers-color-scheme: light) {
+  .l-honest {
+    --crack: rgba(8, 104, 123, 0.5);
+    --crack-soft: rgba(10, 126, 149, 0.12);
+    --glare: rgba(255, 255, 255, 0.7);
+  }
+}
+
+.hn-head {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 44px;
+}
+.hn-eyebrow {
+  margin: 0 0 18px;
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+
+.hn-pane {
+  position: relative;
+  border: 1px solid var(--panel-border);
+  border-radius: 30px;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    linear-gradient(160deg, var(--panel-strong), var(--panel) 38%, var(--panel) 66%, var(--panel-strong)),
+    var(--bg-deep);
+  box-shadow:
+    inset 0 1px 0 var(--glare),
+    0 40px 90px -50px var(--glow);
+}
+/* two long glare streaks across the ice */
+.hn-pane::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 18%,
+    var(--glare) 20%,
+    transparent 27%,
+    transparent 61%,
+    var(--glare) 62%,
+    transparent 65%
+  );
+}
+
+.hn-list {
+  position: relative;
   list-style: none;
   margin: 0;
   padding: 0;
 }
-.l-honest__list li {
+.hn-item {
   position: relative;
-  padding: 20px 0 20px 40px;
-  border-bottom: 1px solid var(--line);
-  font-size: 1.1rem;
+  padding: 30px 24px 32px;
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 700ms ease,
+    transform 700ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  transition-delay: calc(250ms + var(--i) * 110ms);
+}
+.is-in .hn-item {
+  opacity: 1;
+  transform: none;
+}
+.hn-item__no {
+  margin: 0 0 14px;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  transition: color 200ms ease;
+}
+.hn-item:hover .hn-item__no {
+  color: var(--accent);
+}
+.hn-item__title {
+  margin: 0 0 10px;
+  font-size: clamp(1.45rem, 2.4vw, 2rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  max-width: 16ch;
+}
+.hn-item__cant {
+  color: var(--accent);
+}
+.hn-item__body {
+  margin: 0;
+  max-width: 34ch;
+  font-size: 1.05rem;
   color: var(--muted);
 }
-.l-honest__list li::before {
-  content: "✕";
+
+/* mobile: a jagged crack between items */
+.hn-item__crack {
   position: absolute;
-  left: 4px;
-  top: 20px;
-  color: var(--danger);
-  font-weight: 700;
+  left: 16px;
+  right: 16px;
+  top: -7px;
+  width: calc(100% - 32px);
+  height: 14px;
+  overflow: visible;
+  fill: none;
+  stroke: var(--crack);
+  stroke-width: 1.3;
+  stroke-linejoin: round;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 900ms cubic-bezier(0.3, 0.8, 0.2, 1);
+  transition-delay: calc(150ms + var(--i) * 140ms);
 }
-.l-honest__list strong {
-  color: var(--text);
+.hn-item__crack path {
+  vector-effect: non-scaling-stroke;
 }
-@media (min-width: 900px) {
-  .l-honest {
-    grid-template-columns: 0.9fr 1.1fr;
-    gap: 64px;
+.is-in .hn-item__crack {
+  transform: none;
+}
+
+/* desktop: one impact, four shards */
+.hn-cracks {
+  display: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.hn-cracks path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset 900ms cubic-bezier(0.3, 0.8, 0.2, 1);
+}
+.hn-cracks__soft {
+  stroke: var(--crack-soft);
+  stroke-width: 7;
+}
+.hn-cracks__main {
+  stroke: var(--crack);
+  stroke-width: 1.3;
+}
+.hn-cracks__branch {
+  stroke: var(--crack);
+  stroke-width: 0.9;
+  opacity: 0.75;
+}
+.hn-cracks__main path {
+  transition-delay: calc(var(--i) * 60ms);
+}
+.hn-cracks__branch path {
+  transition-duration: 500ms;
+  transition-delay: calc(650ms + var(--i) * 50ms);
+}
+.is-in .hn-cracks path {
+  stroke-dashoffset: 0;
+}
+.hn-cracks__impact {
+  fill: var(--crack-soft);
+  stroke: var(--crack);
+  stroke-width: 1;
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(0);
+  transition: transform 500ms cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+.hn-cracks__dot {
+  fill: var(--accent);
+}
+.is-in .hn-cracks__impact {
+  transform: none;
+}
+
+@media (min-width: 760px) {
+  .hn-cracks {
+    display: block;
+  }
+  .hn-item__crack {
+    display: none;
+  }
+  .hn-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .hn-item {
+    padding: clamp(34px, 4.4vw, 56px) clamp(30px, 4.4vw, 60px);
+  }
+  /* bottom shards sit a little lower so the horizontal crack has room */
+  .hn-item:nth-child(n + 3) {
+    padding-top: clamp(40px, 5vw, 64px);
+  }
+}
+@media (min-width: 1040px) {
+  .hn-head {
+    grid-template-columns: 1fr 1fr;
+    align-items: end;
+  }
+  .hn-head .lead {
+    margin-top: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hn-item,
+  .hn-item__crack,
+  .hn-cracks path,
+  .hn-cracks__impact {
+    transition: none;
+  }
+  .hn-item {
+    opacity: 1;
+    transform: none;
+  }
+  .hn-item__crack,
+  .hn-cracks__impact {
+    transform: none;
+  }
+  .hn-cracks path {
+    stroke-dashoffset: 0;
   }
 }

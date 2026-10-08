@@ -92,18 +92,7 @@
     opacity: 1 !important;
     transform: none !important;
   }
-  .melt-line.is-melting .melt-ch {
-    opacity: 0.35;
-    color: var(--accent);
-  }
-  .melt-line.is-melting .melt-line__text {
-    text-decoration: line-through;
-    text-decoration-color: var(--accent);
-  }
   .curtain {
     display: none;
-  }
-  .l-melt__steps li {
-    transition: none;
   }
 }

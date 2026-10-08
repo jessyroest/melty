@@ -76,3 +76,11 @@ These are the choices made where the spec left room. Items marked *(approved)* w
 - **Condensation.** A faint droplet texture on panels gets stronger on hover and focus.
 - **Light mode.** It follows `prefers-color-scheme`; dark is the default.
 - **OG image.** It has no text; the name can be composited on later. `og:image` uses `VITE_PUBLIC_ORIGIN`, because crawlers need an absolute URL.
+
+## Frontend redesign (2026-10-08)
+
+- **How it was built.** Seven parallel agents built the landing page, the room UI and the how-it-works page. Each owned its own files: mascot/logo, hero, scroll story, explainer cards, flood + finale, room, how-it-works. The shared brief held them to the hard rules: no external resources, the strict CSP, honest claims only, reduced motion, accessibility, 390–1440px, dark + light.
+- **Inspiration.** The layout energy of a long storytelling scroll (usepoof.chat was the reference). No text, names, images or art style were copied; the identity is our own ice/melt theme.
+- **Bundle check.** `scripts/check-bundle.mjs` now allows CSS `url(#id)` references. Those point at SVG filters inside the page itself, not at external resources.
+- **e2e selectors.** `scripts/e2e-smoke.mjs` targets `#start`'s button, because "open a room" now appears three times on the landing page.
+- **Viewport.** `interactive-widget=resizes-content` is set so the chat composer stays above the Android keyboard.

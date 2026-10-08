@@ -1,67 +1,57 @@
-import { type ReactNode, useRef, useState } from "react";
-import { useInView, useNoise, useReducedMotion } from "./hooks";
+import { type PointerEvent, type ReactNode, useRef } from "react";
+import { useInView, useReducedMotion } from "./hooks";
+import { DeadlineDiagram, LinkDiagram, RelayDiagram, StoreDiagram, useOnScreen } from "./WorksDiagrams";
 
-// ---- how the ice works: four cards with tiny live illustrations -----------------
+// ---- how the ice works: four cards, each with a small live diagram ------------------
 
-function LinkIllo() {
-  const reduced = useReducedMotion();
-  const secret = useNoise(43, 2600, reduced);
-  return (
-    <pre className="illo" aria-hidden="true">
-      <span className="muted">{location.host}/r</span>
-      <span className="accent">#{secret.slice(0, 14)}…</span>
-      {"\n"}
-      <span className="muted">└─ </span>never leaves your browser
-    </pre>
-  );
-}
+type CardProps = {
+  n: number;
+  tag: string;
+  title: string;
+  wide?: boolean;
+  illo: (live: boolean) => ReactNode;
+  children: ReactNode;
+};
 
-function NoiseIllo() {
-  const reduced = useReducedMotion();
-  const sealed = useNoise(16, 90, reduced);
-  return (
-    <pre className="illo" aria-hidden="true">
-      <span className="muted">you   </span>see you at 8?{"\n"}
-      <span className="muted">relay </span>
-      <span className="accent">{sealed}</span>
-      {"\n"}
-      <span className="muted">them  </span>see you at 8?
-    </pre>
-  );
-}
-
-function StoreIllo() {
-  const [exp] = useState(() => Date.now() + 600_000);
-  return (
-    <pre className="illo" aria-hidden="true">
-      {"{\n  "}
-      <span className="accent">"expiresAt"</span>: {exp}
-      {"\n}\n"}
-      <span className="muted">// that's all of it</span>
-      <span className="caret">▍</span>
-    </pre>
-  );
-}
-
-function ClockIllo() {
-  return (
-    <div className="illo illo--clock" aria-hidden="true">
-      <span className="mono muted">room k3f9</span>
-      <span className="illo__bar">
-        <span />
-      </span>
-    </div>
-  );
-}
-
-function WorkCard({ illo, title, children }: { illo: ReactNode; title: string; children: ReactNode }) {
+function WorkCard({ n, tag, title, wide, illo, children }: CardProps) {
   const ref = useRef<HTMLElement>(null);
-  const seen = useInView(ref, 0.3);
+  const seen = useInView(ref, 0.2);
+  const live = useOnScreen(ref);
+  const reduced = useReducedMotion();
+
+  // tilt toward the pointer and let a frost sheen follow it (mouse only)
+  const onMove = (e: PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== "mouse") return;
+    const el = e.currentTarget;
+    const r = el.getBoundingClientRect();
+    const x = (e.clientX - r.left) / r.width;
+    const y = (e.clientY - r.top) / r.height;
+    el.style.setProperty("--mx", `${(x * 100).toFixed(1)}%`);
+    el.style.setProperty("--my", `${(y * 100).toFixed(1)}%`);
+    if (reduced) return;
+    el.style.setProperty("--rx", `${((0.5 - y) * 5).toFixed(2)}deg`);
+    el.style.setProperty("--ry", `${((x - 0.5) * (wide ? 4 : 6)).toFixed(2)}deg`);
+  };
+  const onLeave = (e: PointerEvent<HTMLDivElement>) => {
+    e.currentTarget.style.setProperty("--rx", "0deg");
+    e.currentTarget.style.setProperty("--ry", "0deg");
+  };
+
   return (
-    <article ref={ref} className={`l-card reveal${seen ? " is-in" : ""}`}>
-      {illo}
-      <h3>{title}</h3>
-      <p>{children}</p>
+    <article
+      ref={ref}
+      className={`wk reveal${wide ? " wk--wide" : ""}${seen ? " is-in" : ""}${live ? " is-live" : ""}`}
+    >
+      <div className="wk__card" onPointerMove={onMove} onPointerLeave={onLeave}>
+        <div className="wk__stage">{illo(live)}</div>
+        <div className="wk__text">
+          <p className="wk__tag mono">
+            <span>0{n}</span> {tag}
+          </p>
+          <h3>{title}</h3>
+          <p>{children}</p>
+        </div>
+      </div>
     </article>
   );
 }
@@ -75,21 +65,24 @@ export function IceWorks() {
           <br />
           works.
         </h2>
-        <p className="lead">four ideas, no magic. the details are on the how-it-works page.</p>
+        <div>
+          <p className="lead">four ideas, no magic. the details are on the how-it-works page.</p>
+          <p className="l-works__kicker mono">key · noise · nothing kept · deadline</p>
+        </div>
       </div>
       <div className="l-works__grid">
-        <WorkCard illo={<LinkIllo />} title="the link is the key">
+        <WorkCard n={1} tag="the key" title="the link is the key" wide illo={(live) => <LinkDiagram live={live} />}>
           your browser makes a random 32-byte secret and puts it after the # in the link. browsers never send that
           part to a server.
         </WorkCard>
-        <WorkCard illo={<NoiseIllo />} title="the relay sees noise">
+        <WorkCard n={2} tag="the relay" title="the relay sees noise" illo={(live) => <RelayDiagram live={live} />}>
           messages are sealed with AES-256-GCM on your device. the relay passes sealed envelopes along and can't open
           them.
         </WorkCard>
-        <WorkCard illo={<StoreIllo />} title="nothing is kept">
+        <WorkCard n={3} tag="the storage" title="nothing is kept" illo={() => <StoreDiagram />}>
           no message is ever written to the server's storage. the only thing it remembers is when your room melts.
         </WorkCard>
-        <WorkCard illo={<ClockIllo />} title="a real deadline">
+        <WorkCard n={4} tag="the timer" title="a real deadline" wide illo={(live) => <DeadlineDiagram live={live} />}>
           10 minutes, an hour or a day. when time's up the room is wiped for everyone and every browser drops the key.
         </WorkCard>
       </div>

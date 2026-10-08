@@ -1,18 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { navigate } from "../lib/router";
 import { joinFromFragment } from "../state/session";
+import { Mascot } from "./Mascot";
+import { CloseIcon, LinkIcon } from "./RoomIcons";
+import { useSheet } from "./RoomSheet";
 
 /** Paste a room link (or just the part after #) to join from this tab. */
 export function JoinDialog({ onClose }: { onClose: () => void }) {
-  const ref = useRef<HTMLDialogElement>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const { ref, onClick } = useSheet(onClose, input);
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const d = ref.current;
-    d?.showModal();
-    return () => d?.close();
-  }, []);
+  const [tries, setTries] = useState(0);
 
   async function join() {
     const raw = value.trim();
@@ -23,18 +22,32 @@ export function JoinDialog({ onClose }: { onClose: () => void }) {
       navigate("/r");
     } else {
       setError("that doesn't look like a melty room link.");
+      setTries((t) => t + 1);
     }
   }
 
+  // the field is re-mounted to replay the shake; put the cursor back in it
+  useEffect(() => {
+    if (tries) input.current?.focus();
+  }, [tries]);
+
   return (
-    <dialog ref={ref} className="sheet panel" aria-labelledby="join-title" onClose={onClose}>
+    <dialog ref={ref} className="sheet sheet--join" aria-labelledby="join-title" onClose={onClose} onClick={onClick}>
       <div className="sheet__head">
-        <h2 id="join-title">join a room</h2>
-        <button className="btn btn--ghost" type="button" onClick={onClose} aria-label="close">
-          ✕
+        <div className="sheet__titled">
+          <Mascot left={1} size={52} className="sheet__mascot" />
+          <div>
+            <span className="sheet__kicker mono">join</span>
+            <h2 id="join-title">join a room</h2>
+          </div>
+        </div>
+        <button className="sheet__close" type="button" onClick={onClose} aria-label="close">
+          <CloseIcon />
         </button>
       </div>
-      <p className="muted">paste the link someone sent you. it stays in this tab and is cleared from the field right away.</p>
+      <p className="sheet__lead">
+        paste the link someone sent you. it stays in this tab and is cleared from the field right away.
+      </p>
       <form
         className="joinform"
         onSubmit={(e) => {
@@ -44,27 +57,30 @@ export function JoinDialog({ onClose }: { onClose: () => void }) {
       >
         <label className="field">
           <span className="field__label">room link</span>
-          <input
-            className="input mono"
-            value={value}
-            onChange={(e) => {
-              setValue(e.target.value);
-              setError(null);
-            }}
-            placeholder={`${location.host}/r#…`}
-            autoComplete="off"
-            spellCheck={false}
-            autoFocus
-            aria-invalid={error ? true : undefined}
-            aria-describedby={error ? "join-error" : undefined}
-          />
+          <span key={tries} className={`joinform__box${error ? " is-wrong" : ""}`}>
+            <LinkIcon className="joinform__icon" />
+            <input
+              ref={input}
+              className="input mono joinform__input"
+              value={value}
+              onChange={(e) => {
+                setValue(e.target.value);
+                setError(null);
+              }}
+              placeholder={`${location.host}/r#…`}
+              autoComplete="off"
+              spellCheck={false}
+              aria-invalid={error ? true : undefined}
+              aria-describedby={error ? "join-error" : undefined}
+            />
+          </span>
         </label>
         {error && (
-          <p id="join-error" className="hint" role="alert">
+          <p id="join-error" className="joinform__error" role="alert">
             {error}
           </p>
         )}
-        <button className="btn btn--primary" type="submit" disabled={!value.trim()}>
+        <button className="btn btn--primary joinform__go" type="submit" disabled={!value.trim()}>
           join
         </button>
       </form>

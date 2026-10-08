@@ -1,7 +1,9 @@
 import { TTL_OPTIONS, type Ttl } from "@relay/protocol";
-import { useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { createRoom, MELTED, setNotice } from "../state/session";
-import { Frost } from "./landing/Frost";
+import { Frost, frostBurst } from "./landing/Frost";
+import { Crack, HeroWords, Snowflake, TtlCube } from "./landing/HeroBits";
+import { MeltCurtain } from "./landing/HeroCurtain";
 import { FinalCta, Footer, Honest, IceWorks, MeltScroll, NeverAsk, UseCases } from "./landing/Sections";
 import { LiveMascot } from "./LiveMascot";
 import { Mascot } from "./Mascot";
@@ -26,7 +28,8 @@ function StartPanel() {
   return (
     <form
       id="start"
-      className="panel start"
+      className={`panel start${busy ? " is-busy" : ""}`}
+      aria-busy={busy}
       onSubmit={(e) => {
         e.preventDefault();
         void start();
@@ -38,45 +41,61 @@ function StartPanel() {
           {TTL_OPTIONS.map((t) => (
             <label key={t} className="ttl__option">
               <input type="radio" name="ttl" value={t} checked={ttl === t} onChange={() => setTtl(t)} />
-              <span>{TTL_LABELS[t]}</span>
+              <span>
+                <TtlCube ttl={t} />
+                {TTL_LABELS[t]}
+              </span>
             </label>
           ))}
         </div>
       </fieldset>
-      <button className="btn btn--primary btn--big" type="submit" disabled={busy}>
-        {busy ? "freezing…" : "open a room"}
+      <button className="btn btn--primary btn--big start__go" type="submit" disabled={busy}>
+        <span className="start__shine" aria-hidden="true" />
+        <Crack />
+        <span className="start__label">
+          {busy && <Snowflake />}
+          {busy ? "freezing…" : "open a room"}
+        </span>
       </button>
     </form>
   );
 }
 
-/** the screen drips away when you arrive here because your room melted */
-function MeltCurtain() {
-  const [on, setOn] = useState(true);
-  useEffect(() => {
-    const t = setTimeout(() => setOn(false), 2600);
-    return () => clearTimeout(t);
-  }, []);
-  if (!on) return null;
-  return (
-    <div className="curtain" aria-hidden="true">
-      {Array.from({ length: 14 }, (_, i) => (
-        <span key={i} style={{ ["--i" as string]: i, ["--r" as string]: ((i * 37) % 11) / 10 }} />
-      ))}
-    </div>
-  );
-}
+/** the entrance plays once per page load, not every time you come back to "/" */
+let introPlayed = false;
+const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+const delay = (ms: number) => ({ ["--d" as string]: `${ms}ms` }) as CSSProperties;
 
 export function Home({ notice, onJoin }: { notice: string | null; onJoin: () => void }) {
   const melted = notice === MELTED;
+  const [intro] = useState(() => !introPlayed && !melted);
+  const hero = useRef<HTMLElement>(null);
+  const stage = useRef<HTMLDivElement>(null);
+
+  // when the cube lands, kick up a little frost where it hits
+  useEffect(() => {
+    introPlayed = true;
+    if (!intro || reduceMotion()) return;
+    const t = setTimeout(() => {
+      const r = stage.current?.getBoundingClientRect();
+      if (r && hero.current) frostBurst(hero.current, r.left + r.width / 2, r.top + r.height * 0.86, 18);
+    }, 650);
+    return () => clearTimeout(t);
+  }, [intro]);
 
   return (
     <div className="landing">
       {melted && <MeltCurtain />}
-      <section className="l-hero">
-        <Frost />
+      <section ref={hero} className={`l-hero${intro ? " is-intro" : ""}`}>
+        <Frost bursts />
         <div className="l-hero__art">
-          {melted ? <Mascot left={0} size={360} className="l-hero__mascot" /> : <LiveMascot pokeable size={360} className="l-hero__mascot" />}
+          <div ref={stage} className="l-hero__stage">
+            <span className="l-hero__shadow" aria-hidden="true" />
+            <span className="l-hero__ring" aria-hidden="true" />
+            <span className="l-hero__drop">
+              {melted ? <Mascot left={0} size={360} className="l-hero__mascot" /> : <LiveMascot pokeable size={360} className="l-hero__mascot" />}
+            </span>
+          </div>
           {!melted && (
             <p className="l-hero__psst mono" aria-hidden="true">
               psst. poke it.
@@ -84,13 +103,17 @@ export function Home({ notice, onJoin }: { notice: string | null; onJoin: () => 
           )}
         </div>
         <div className="l-hero__text">
-          <p className="eyebrow mono">temporary rooms · end-to-end encrypted</p>
-          <h1 className="h-display">
-            say it.
+          <p className="eyebrow mono l-hero__in" style={delay(0)}>
+            temporary rooms · end-to-end encrypted
+          </p>
+          <h1 className="h-display l-hero__title">
+            <HeroWords text="say it." />
             <br />
-            <span className="accent">then let it melt.</span>
+            <span className="accent">
+              <HeroWords text="then let it melt." from={2} />
+            </span>
           </h1>
-          <p className="lead">
+          <p className="lead l-hero__in" style={delay(460)}>
             a chat room with a countdown. no account, no history. share a link, talk, and when the timer hits zero it's
             just water.
           </p>
@@ -102,13 +125,13 @@ export function Home({ notice, onJoin }: { notice: string | null; onJoin: () => 
           )}
 
           <StartPanel />
-          <p className="l-hero__join">
+          <p className="l-hero__join l-hero__in" style={delay(780)}>
             got a link?{" "}
             <button type="button" className="linklike" onClick={onJoin}>
               join a room
             </button>
           </p>
-          <ul className="chips mono">
+          <ul className="chips mono l-hero__in" style={delay(860)}>
             <li>end-to-end encrypted</li>
             <li>no account</li>
             <li>messages never stored</li>

@@ -4,6 +4,7 @@ import "@fontsource-variable/jetbrains-mono/wght.css";
 import "./styles/app.css";
 import "./styles/landing.css";
 import "./styles/mascot.css";
+import "./styles/logo.css";
 import "./styles/hero.css";
 import "./styles/never.css";
 import "./styles/melt.css";

@@ -80,6 +80,8 @@ for (const file of files) {
   if (file.endsWith(".css")) {
     for (const m of text.matchAll(/url\(\s*["']?([^"')]+)/g)) {
       const v = m[1];
+      // url(#id) points at an element in the page itself (e.g. an inline SVG filter)
+      if (v.startsWith("#")) continue;
       if (!v.startsWith("/") || v.startsWith("//")) problems.push(`${rel}: url(${v}) is not same-origin`);
     }
     if (/@import/.test(text)) problems.push(`${rel}: @import`);

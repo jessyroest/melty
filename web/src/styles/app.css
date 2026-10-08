@@ -141,9 +141,6 @@ code {
   font-size: 1.25rem;
   letter-spacing: -0.01em;
 }
-.brand:hover .brand__mascot {
-  animation: wiggle 500ms ease-in-out;
-}
 @media (max-width: 560px) {
   .hide-sm {
     display: none;
