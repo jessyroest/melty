@@ -8,7 +8,7 @@
 // Runs against the dev server by default: WEB_URL=http://localhost:5173.
 import { chromium } from "playwright-core";
 
-const WEB = process.env.WEB_URL ?? "http://localhost:5173";
+const WEB = process.env.WEB_URL ?? "http://localhost:4173";
 const SHOTS = process.env.SHOTS_DIR;
 const channel = process.env.BROWSER_CHANNEL ?? "msedge";
 
