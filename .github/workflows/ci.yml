@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  WRANGLER_SEND_METRICS: "false"
+
+jobs:
+  check:
+    name: test, build, bundle + log checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6 # version comes from "packageManager" in package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm check:bundle
+      - run: pnpm check:logs
+
+  e2e:
+    name: browser e2e (Chrome)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      # Google Chrome is preinstalled on the ubuntu-latest runner image, so
+      # playwright-core can use it via BROWSER_CHANNEL=chrome; nothing is downloaded.
+      - name: Start relay and web preview
+        run: |
+          nohup pnpm --filter @melty/relay dev > "$RUNNER_TEMP/relay.log" 2>&1 &
+          nohup pnpm --filter @melty/web preview > "$RUNNER_TEMP/preview.log" 2>&1 &
+
+      - name: Wait for ports 8787 and 4173
+        run: |
+          for port in 8787 4173; do
+            for i in $(seq 1 60); do
+              if curl -s -o /dev/null "http://localhost:$port/"; then
+                echo "port $port is up"
+                break
+              fi
+              if [ "$i" -eq 60 ]; then
+                echo "port $port did not respond within 60s"
+                exit 1
+              fi
+              sleep 1
+            done
+          done
+
+      - name: e2e smoke
+        run: pnpm e2e
+        env:
+          BROWSER_CHANNEL: chrome
+
+      - name: e2e features
+        run: pnpm e2e:features
+        env:
+          BROWSER_CHANNEL: chrome
+
+      - name: Server output (on failure)
+        if: failure()
+        run: |
+          echo "--- relay ---"; tail -n 50 "$RUNNER_TEMP/relay.log" || true
+          echo "--- preview ---"; tail -n 50 "$RUNNER_TEMP/preview.log" || true

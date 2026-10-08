@@ -155,3 +155,7 @@ After deploying either way, open the site and check the response headers in devt
 
 - [ASSUMPTIONS.md](ASSUMPTIONS.md): every choice made that the spec didn't pin down.
 - [HIGGSFIELD.md](HIGGSFIELD.md): generated images, prompts and credits used.
+
+## Contributing
+
+Want to help? Start with [CONTRIBUTING.md](CONTRIBUTING.md): setup, the checks to run, the project structure, and the hard rules every change must follow. Pull requests go against `main` and need a green CI run.

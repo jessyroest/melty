@@ -115,3 +115,10 @@ The five features below were chosen on request: "voeg 5 nieuwe dingen toe, techn
   - `react` messages reference it, with a fixed set of four emoji and an on/off toggle.
   - Reactions are keyed by nickname, which is unverified.
 - **Bug found while building this.** The message pool used `overflow: hidden` while its water layer is translated down out of it. That made the pool scrollable, and focusing a button inside it scrolled the whole pool up. It's now `overflow: clip`.
+
+## Contributor setup (2026-10-08)
+
+- **Node version.** `.nvmrc` and CI use Node 22, and CONTRIBUTING.md asks for 22+, because `wrangler` 4 declares `node >= 22`. The README's "Node 20+" predates this check.
+- **CI browser.** The e2e job runs with `BROWSER_CHANNEL=chrome`, using the Google Chrome that GitHub's `ubuntu-latest` runner image ships with. Nothing is downloaded by Playwright.
+- **CI actions.** Pinned to major tags: `actions/checkout@v7`, `pnpm/action-setup@v6` (pnpm version from `packageManager`), `actions/setup-node@v7` with the pnpm cache. Wrangler metrics are turned off in CI.
+- **Server output in CI.** The relay and preview output go to files in the runner's temp folder and are only printed when a step fails. The relay runs with `--log-level warn`, so room ids don't appear there.
