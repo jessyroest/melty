@@ -1,6 +1,7 @@
 import { type CSSProperties, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Line } from "../state/session";
 import { Mascot } from "./Mascot";
+import { Bubble, type BubbleActions } from "./RoomBubble";
 import { nickHue, RoomCube } from "./RoomCube";
 import { ArrowDownIcon, InviteIcon } from "./RoomIcons";
 
@@ -11,14 +12,21 @@ type Props = {
   water: number;
   fraction: number;
   onInvite: () => void;
+  actions: BubbleActions;
 };
 
 /** The message pool: a scrolling log floating on slowly rising meltwater. */
-export function RoomMessages({ lines, isCreator, water, fraction, onInvite }: Props) {
+export function RoomMessages({ lines, isCreator, water, fraction, onInvite, actions }: Props) {
   return (
     <div className="r-pool panel" style={{ "--water": water.toFixed(4) } as CSSProperties}>
       <Water />
-      <MessageList lines={lines} isCreator={isCreator} fraction={lines.length ? 1 : fraction} onInvite={onInvite} />
+      <MessageList
+        lines={lines}
+        isCreator={isCreator}
+        fraction={lines.length ? 1 : fraction}
+        onInvite={onInvite}
+        actions={actions}
+      />
     </div>
   );
 }
@@ -88,9 +96,9 @@ function group(lines: Line[]): Item[] {
 
 const clock = (ts: number) => new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-type ListProps = { lines: Line[]; isCreator: boolean; fraction: number; onInvite: () => void };
+type ListProps = { lines: Line[]; isCreator: boolean; fraction: number; onInvite: () => void; actions: BubbleActions };
 
-const MessageList = memo(function MessageList({ lines, isCreator, fraction, onInvite }: ListProps) {
+const MessageList = memo(function MessageList({ lines, isCreator, fraction, onInvite, actions }: ListProps) {
   const box = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const [unseen, setUnseen] = useState(0);
@@ -144,7 +152,11 @@ const MessageList = memo(function MessageList({ lines, isCreator, fraction, onIn
           <Empty isCreator={isCreator} fraction={fraction} onInvite={onInvite} />
         ) : (
           items.map((it) =>
-            it.type === "sys" ? <SystemLine key={it.key} line={it.line} /> : <Group key={it.key} item={it} />,
+            it.type === "sys" ? (
+              <SystemLine key={it.key} line={it.line} />
+            ) : (
+              <Group key={it.key} item={it} actions={actions} />
+            ),
           )
         )}
       </div>
@@ -158,7 +170,7 @@ const MessageList = memo(function MessageList({ lines, isCreator, fraction, onIn
   );
 });
 
-function Group({ item }: { item: Extract<Item, { type: "group" }> }) {
+function Group({ item, actions }: { item: Extract<Item, { type: "group" }>; actions: BubbleActions }) {
   const { mine, nick, lines } = item;
   const lastLine = lines[lines.length - 1]!;
   return (
@@ -174,10 +186,7 @@ function Group({ item }: { item: Extract<Item, { type: "group" }> }) {
           </span>
         )}
         {lines.map((l) => (
-          <p key={l.id} className="r-bubble">
-            <span className="sr-only">{mine ? "you: " : `${nick}: `}</span>
-            {l.text}
-          </p>
+          <Bubble key={l.id} line={l} nick={nick} mine={mine} actions={actions} />
         ))}
         <time className="r-msgs__time mono" dateTime={new Date(lastLine.ts).toISOString()}>
           {mine ? `you · ${clock(lastLine.ts)}` : clock(lastLine.ts)}
@@ -189,11 +198,17 @@ function Group({ item }: { item: Extract<Item, { type: "group" }> }) {
 
 function SystemLine({ line }: { line: Line }) {
   const t = line.text;
-  const kind = t.endsWith(" joined") ? "join" : t.endsWith(" left") ? "leave" : "nick";
+  const kind = t.startsWith("the room is")
+    ? "lock"
+    : t.endsWith(" joined")
+      ? "join"
+      : t.endsWith(" left")
+        ? "leave"
+        : "nick";
   return (
     <p className={`r-sys r-sys--${kind}`}>
       <span className="r-sys__glyph" aria-hidden="true">
-        {kind === "join" ? "+" : kind === "leave" ? "−" : "✎"}
+        {kind === "join" ? "+" : kind === "leave" ? "−" : kind === "lock" ? "🔒" : "✎"}
       </span>
       {t}
     </p>

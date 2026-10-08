@@ -1,9 +1,9 @@
 import { MAX_PARTICIPANTS } from "@relay/protocol";
-import type { CSSProperties } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 import type { Status, View } from "../state/session";
 import { LiveMascot } from "./LiveMascot";
 import { RoomCube } from "./RoomCube";
-import { InviteIcon, LeaveIcon, LockIcon } from "./RoomIcons";
+import { DropIcon, InviteIcon, LeaveIcon, LockIcon, UnlockIcon } from "./RoomIcons";
 import { formatLeft, spokenLeft } from "./time";
 
 /** below this fraction of the lifetime the room gets a little nervous */
@@ -21,14 +21,16 @@ type Props = {
   fraction: number;
   onShare: () => void;
   onLeave: () => void;
+  onLock: (on: boolean) => void;
+  onMelt: () => void;
 };
 
-export function RoomBar({ view, leftMs, fraction, onShare, onLeave }: Props) {
+export function RoomBar({ view, leftMs, fraction, onShare, onLeave, onLock, onMelt }: Props) {
   const known = view.expiresAt !== null && view.ttlMs !== null;
   const urgent = known && fraction <= URGENT;
 
   return (
-    <header className={`roombar panel${urgent ? " is-urgent" : ""}`}>
+    <header className={`roombar panel${urgent ? " is-urgent" : ""}${view.isCreator ? " roombar--owner" : ""}`}>
       <MeltRing fraction={fraction} bump={view.lines.length} urgent={urgent} />
 
       <div className="roombar__clock">
@@ -48,7 +50,31 @@ export function RoomBar({ view, leftMs, fraction, onShare, onLeave }: Props) {
           end-to-end encrypted
         </span>
         <StatusPill status={view.status} />
+        {view.locked && (
+          <span className="r-locked">
+            <LockIcon />
+            locked
+          </span>
+        )}
       </div>
+
+      {view.isCreator && (
+        <div className="roombar__owner" role="group" aria-label="creator controls">
+          <button
+              className={`btn btn--ghost btn--small r-lockbtn${view.locked ? " is-on" : ""}`}
+              type="button"
+              aria-pressed={view.locked}
+              aria-label={view.locked ? "unlock the room" : "lock the room: nobody new can join"}
+              title={view.locked ? "unlock the room" : "lock the room"}
+              onClick={() => onLock(!view.locked)}
+              disabled={view.status !== "live"}
+            >
+              {view.locked ? <LockIcon /> : <UnlockIcon />}
+              <span className="r-lockbtn__text">{view.locked ? "locked" : "lock"}</span>
+            </button>
+          <HoldToMelt onMelt={onMelt} disabled={view.status !== "live"} />
+        </div>
+      )}
 
       <div className="roombar__actions">
         <button className="btn btn--primary btn--small roombar__invite" type="button" onClick={onShare}>
@@ -141,6 +167,60 @@ function StatusPill({ status }: { status: Status }) {
       <span className="r-status__dot" aria-hidden="true" />
       {status === "live" ? "live" : status === "connecting" ? "connecting…" : "reconnecting…"}
     </span>
+  );
+}
+
+const HOLD_MS = 1500;
+
+/** melting the room for everyone needs a deliberate press-and-hold (mouse, touch or keyboard) */
+function HoldToMelt({ onMelt, disabled }: { onMelt: () => void; disabled: boolean }) {
+  const [holding, setHolding] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const start = () => {
+    if (disabled || timer.current) return;
+    setHolding(true);
+    timer.current = setTimeout(() => {
+      timer.current = undefined;
+      setHolding(false);
+      onMelt();
+    }, HOLD_MS);
+  };
+  const stop = () => {
+    clearTimeout(timer.current);
+    timer.current = undefined;
+    setHolding(false);
+  };
+  useEffect(() => stop, []);
+
+  return (
+    <button
+      className={`btn btn--ghost btn--small r-meltbtn${holding ? " is-holding" : ""}`}
+      type="button"
+      disabled={disabled}
+      aria-label="melt the room now for everyone. press and hold"
+      title="hold to melt the room for everyone"
+      style={{ "--hold": `${HOLD_MS}ms` } as CSSProperties}
+      onPointerDown={start}
+      onPointerUp={stop}
+      onPointerLeave={stop}
+      onPointerCancel={stop}
+      onContextMenu={(e) => e.preventDefault()}
+      onKeyDown={(e) => {
+        if ((e.key === " " || e.key === "Enter") && !e.repeat) {
+          e.preventDefault();
+          start();
+        }
+      }}
+      onKeyUp={(e) => {
+        if (e.key === " " || e.key === "Enter") stop();
+      }}
+      onBlur={stop}
+    >
+      <span className="r-meltbtn__fill" aria-hidden="true" />
+      <DropIcon />
+      <span className="r-meltbtn__text">{holding ? "keep holding…" : "melt now"}</span>
+    </button>
   );
 }
 

@@ -1,10 +1,12 @@
-import type { ErrorCode, ServerFrame, Ttl } from "@relay/protocol";
+import type { ClientFrame, ErrorCode, ServerFrame, Ttl } from "@relay/protocol";
 import type { Sealed } from "../crypto/aead";
 
 export const RELAY_URL: string = import.meta.env.VITE_RELAY_URL ?? "ws://localhost:8787";
 
 export type RelayEvent =
-  | { type: "hello"; now: number; expiresAt: number; ttl: number; n: number }
+  | { type: "hello"; now: number; expiresAt: number; ttl: number; n: number; locked: boolean }
+  | { type: "locked"; on: boolean }
+  | { type: "melted" }
   | { type: "presence"; n: number }
   | { type: "msg"; sealed: Sealed }
   | { type: "expired" }
@@ -19,9 +21,16 @@ export class RelayConnection {
   private ping: ReturnType<typeof setInterval> | undefined;
   private done = false;
 
-  constructor(roomId: string, create: Ttl | undefined, private onEvent: (e: RelayEvent) => void) {
+  /** `owner` is the SHA-256 of the creator's secret; only the creator ever has one */
+  constructor(
+    roomId: string,
+    create: Ttl | undefined,
+    owner: string | undefined,
+    private onEvent: (e: RelayEvent) => void,
+  ) {
     const url = new URL(`/rooms/${roomId}/ws`, RELAY_URL);
     if (create) url.searchParams.set("create", String(create));
+    if (owner) url.searchParams.set("owner", owner);
     this.ws = new WebSocket(url);
     this.ws.onopen = () => {
       this.ping = setInterval(() => this.ws.send('{"t":"ping"}'), PING_MS);
@@ -47,6 +56,13 @@ export class RelayConnection {
     return true;
   }
 
+  /** creator-only control frames: they carry no message content */
+  control(frame: Extract<ClientFrame, { t: "melt" | "lock" }>): boolean {
+    if (!this.open) return false;
+    this.ws.send(JSON.stringify(frame));
+    return true;
+  }
+
   /** close without reporting back */
   close(): void {
     this.done = true;
@@ -62,7 +78,11 @@ export class RelayConnection {
   private handle(f: ServerFrame): void {
     switch (f.t) {
       case "hello":
-        return this.onEvent({ type: "hello", now: f.now, expiresAt: f.expiresAt, ttl: f.ttl, n: f.n });
+        return this.onEvent({ type: "hello", now: f.now, expiresAt: f.expiresAt, ttl: f.ttl, n: f.n, locked: !!f.locked });
+      case "locked":
+        return this.onEvent({ type: "locked", on: !!f.on });
+      case "melted":
+        return this.onEvent({ type: "melted" });
       case "presence":
         return this.onEvent({ type: "presence", n: f.n });
       case "msg":

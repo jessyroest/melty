@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { fromB64url, toB64url } from "../lib/b64url";
 import { open, seal } from "./aead";
 import { deriveRoom, newSecret, SECRET_BYTES } from "./derive";
-import { decodeInner, encodeInner, TooLarge } from "./message";
+import { decodeInner, encodeInner, newMsgId, TooLarge } from "./message";
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -116,7 +116,7 @@ describe("aes-gcm", () => {
 
 describe("inner messages", () => {
   it("roundtrips and validates", () => {
-    const m = { v: 1, kind: "chat", nick: "quiet-otter", text: "hello", ts: 1 } as const;
+    const m = { v: 1, kind: "chat", id: newMsgId(), nick: "quiet-otter", text: "hello", ts: 1 } as const;
     expect(decodeInner(encodeInner(m))).toEqual(m);
     expect(decodeInner(enc.encode('{"v":2}'))).toBeNull();
     expect(decodeInner(enc.encode("nope"))).toBeNull();
@@ -124,6 +124,41 @@ describe("inner messages", () => {
   });
 
   it("refuses plaintext over 4 KB", () => {
-    expect(() => encodeInner({ v: 1, kind: "chat", nick: "a", text: "x".repeat(4096), ts: 1 })).toThrow(TooLarge);
+    expect(() => encodeInner({ v: 1, kind: "chat", id: newMsgId(), nick: "a", text: "x".repeat(4096), ts: 1 })).toThrow(
+      TooLarge,
+    );
+  });
+
+  const raw = (o: object) => new TextEncoder().encode(JSON.stringify(o));
+
+  it("message ids are 8 random bytes, base64url", () => {
+    const ids = new Set(Array.from({ length: 50 }, newMsgId));
+    expect(ids.size).toBe(50);
+    for (const id of ids) expect(id).toMatch(/^[A-Za-z0-9_-]{11}$/);
+  });
+
+  it("accepts burn-after-read chat, typing and reactions", () => {
+    const id = newMsgId();
+    const burn = { v: 1, kind: "chat", id, nick: "a", text: "gone soon", ts: 1, burn: true } as const;
+    expect(decodeInner(encodeInner(burn))).toEqual(burn);
+    const typing = { v: 1, kind: "typing", nick: "a", ts: 1 } as const;
+    expect(decodeInner(encodeInner(typing))).toEqual(typing);
+    const react = { v: 1, kind: "react", nick: "a", target: id, emoji: "🧊", on: true, ts: 1 } as const;
+    expect(decodeInner(encodeInner(react))).toEqual(react);
+  });
+
+  it("rejects malformed new kinds", () => {
+    const id = newMsgId();
+    // chat without an id, with a bad id, or a non-true burn flag
+    expect(decodeInner(raw({ v: 1, kind: "chat", nick: "a", text: "x", ts: 1 }))).toBeNull();
+    expect(decodeInner(raw({ v: 1, kind: "chat", id: "short", nick: "a", text: "x", ts: 1 }))).toBeNull();
+    expect(decodeInner(raw({ v: 1, kind: "chat", id, nick: "a", text: "x", ts: 1, burn: "yes" }))).toBeNull();
+    // reactions only from the fixed set, on a real id, with a boolean
+    expect(decodeInner(raw({ v: 1, kind: "react", nick: "a", target: id, emoji: "💀", on: true, ts: 1 }))).toBeNull();
+    expect(decodeInner(raw({ v: 1, kind: "react", nick: "a", target: "nope", emoji: "🧊", on: true, ts: 1 }))).toBeNull();
+    expect(decodeInner(raw({ v: 1, kind: "react", nick: "a", target: id, emoji: "🧊", on: 1, ts: 1 }))).toBeNull();
+    // unknown kinds and missing nicks
+    expect(decodeInner(raw({ v: 1, kind: "file", nick: "a", ts: 1 }))).toBeNull();
+    expect(decodeInner(raw({ v: 1, kind: "typing", ts: 1 }))).toBeNull();
   });
 });

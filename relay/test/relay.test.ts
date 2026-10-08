@@ -1,7 +1,7 @@
 import { runDurableObjectAlarm } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CLOSE, CREATE_LIMIT_PER_HOUR, inferTtl, MAX_CT_CHARS, MAX_FRAME_CHARS, MAX_PARTICIPANTS } from "../src/protocol";
-import { connect, fakeMsg, randomRoomId, rawFetch, roomStub, setStored, storageKeys, tick } from "./helpers";
+import { connect, fakeMsg, makeOwner, randomRoomId, rawFetch, roomStub, setStored, storageKeys, tick } from "./helpers";
 
 describe("rooms", () => {
   it("creating a room says hello with server time and expiry", async () => {
@@ -201,6 +201,95 @@ describe("limits", () => {
 
     const other = await connect(randomRoomId(), { create: 600, ip: "203.0.113.8" });
     expect((await other.next()).t).toBe("hello");
+  });
+});
+
+describe("creator controls", () => {
+  async function roomWithTwo() {
+    const id = randomRoomId();
+    const owner = await makeOwner();
+    const a = await connect(id, { create: 600, owner: owner.hash });
+    expect(await a.next()).toMatchObject({ t: "hello", locked: false });
+    const b = await connect(id);
+    await b.next();
+    await a.next(); // presence
+    return { id, owner, a, b };
+  }
+
+  it("the creator can melt the room for everyone, right now", async () => {
+    const { id, owner, a, b } = await roomWithTwo();
+    a.send({ t: "melt", owner: owner.secret });
+    expect(await a.next()).toEqual({ t: "melted" });
+    expect(await b.next()).toEqual({ t: "melted" });
+    expect((await a.closed).code).toBe(CLOSE.melted);
+    expect((await b.closed).code).toBe(CLOSE.melted);
+    expect(await storageKeys(id)).toEqual(["goneUntil"]);
+    const late = await connect(id);
+    expect(await late.next()).toEqual({ t: "error", code: "gone" });
+  });
+
+  it("nobody else can melt or lock: a wrong or replayed-hash proof is refused", async () => {
+    const { id, owner, a, b } = await roomWithTwo();
+    const other = await makeOwner();
+    b.send({ t: "melt", owner: other.secret });
+    expect(await b.next()).toEqual({ t: "error", code: "bad" });
+    // the hash itself is not the proof
+    b.send({ t: "melt", owner: owner.hash });
+    expect(await b.next()).toEqual({ t: "error", code: "bad" });
+    b.send({ t: "lock", owner: other.secret, on: true });
+    expect(await b.next()).toEqual({ t: "error", code: "bad" });
+    await tick();
+    expect(a.queue).toEqual([]);
+    expect(await storageKeys(id)).toEqual(["expiresAt"]);
+  });
+
+  it("a locked room refuses newcomers until it's unlocked; the creator can always get back in", async () => {
+    const { id, owner, a, b } = await roomWithTwo();
+    a.send({ t: "lock", owner: owner.secret, on: true });
+    expect(await a.next()).toEqual({ t: "locked", on: true });
+    expect(await b.next()).toEqual({ t: "locked", on: true });
+
+    const c = await connect(id);
+    expect(await c.next()).toEqual({ t: "error", code: "locked" });
+    expect((await c.closed).code).toBe(CLOSE.locked);
+
+    const back = await connect(id, { owner: owner.hash });
+    expect(await back.next()).toMatchObject({ t: "hello", locked: true });
+    back.ws.close(1000);
+    await a.next(); // presence 3
+    await a.next(); // presence 2
+
+    a.send({ t: "lock", owner: owner.secret, on: false });
+    expect(await a.next()).toEqual({ t: "locked", on: false });
+    const d = await connect(id);
+    expect(await d.next()).toMatchObject({ t: "hello", locked: false });
+  });
+
+  it("owner and lock live only on the sockets, never in storage", async () => {
+    const { id, owner, a, b } = await roomWithTwo();
+    a.send({ t: "lock", owner: owner.secret, on: true });
+    await a.next();
+    await b.next();
+    expect(await storageKeys(id)).toEqual(["expiresAt"]);
+  });
+
+  it("joining an empty room can't claim ownership", async () => {
+    const id = randomRoomId();
+    const owner = await makeOwner();
+    const a = await connect(id, { create: 600, owner: owner.hash });
+    await a.next();
+    a.ws.close(1000);
+    await tick(100);
+    const thief = await makeOwner();
+    const t = await connect(id, { owner: thief.hash });
+    expect((await t.next()).t).toBe("hello");
+    t.send({ t: "melt", owner: thief.secret });
+    expect(await t.next()).toEqual({ t: "error", code: "bad" });
+  });
+
+  it("rejects a malformed owner parameter", async () => {
+    const a = await connect(randomRoomId(), { create: 600, owner: "not-a-hash" });
+    expect(await a.next()).toEqual({ t: "error", code: "bad" });
   });
 });
 

@@ -102,3 +102,29 @@ export const ArrowDownIcon = (p: P) => (
     <path d="M12 5v14M6 13l6 6 6-6" />
   </Icon>
 );
+
+export const UnlockIcon = (p: P) => (
+  <Icon {...p}>
+    <rect x="5" y="10.5" width="14" height="10" rx="3" />
+    <path d="M8.5 10.5V8a3.5 3.5 0 0 1 6.6-1.6" />
+  </Icon>
+);
+
+export const FlameIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M12 21c-3.6 0-6-2.4-6-5.6 0-3.4 2.6-5 3.4-8.4 1.8 1.3 2.6 3 2.6 4.6 1-.6 1.6-1.6 1.8-3 1.8 1.6 4.2 3.8 4.2 6.8 0 3.2-2.4 5.6-6 5.6Z" />
+  </Icon>
+);
+
+export const SmileIcon = (p: P) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M8.6 14.2a4.2 4.2 0 0 0 6.8 0M9.3 9.6h.01M14.7 9.6h.01" />
+  </Icon>
+);
+
+export const DropIcon = (p: P) => (
+  <Icon {...p}>
+    <path d="M12 3.5c3 3.9 5.6 7.1 5.6 10.2a5.6 5.6 0 0 1-11.2 0c0-3.1 2.6-6.3 5.6-10.2Z" />
+  </Icon>
+);

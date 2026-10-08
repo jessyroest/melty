@@ -19,7 +19,13 @@ export type Conn = {
 
 export async function connect(
   roomId: string,
-  opts: { create?: number | string; origin?: string | null; ip?: string; headers?: Record<string, string> } = {},
+  opts: {
+    create?: number | string;
+    owner?: string;
+    origin?: string | null;
+    ip?: string;
+    headers?: Record<string, string>;
+  } = {},
 ): Promise<Conn> {
   const res = await rawFetch(roomId, opts);
   const ws = res.webSocket;
@@ -47,6 +53,7 @@ export function rawFetch(
   roomId: string,
   opts: {
     create?: number | string;
+    owner?: string;
     origin?: string | null;
     ip?: string;
     upgrade?: boolean;
@@ -54,7 +61,10 @@ export function rawFetch(
     headers?: Record<string, string>;
   } = {},
 ): Promise<Response> {
-  const q = opts.create !== undefined ? `?create=${opts.create}` : "";
+  const params = new URLSearchParams();
+  if (opts.create !== undefined) params.set("create", String(opts.create));
+  if (opts.owner !== undefined) params.set("owner", opts.owner);
+  const q = params.size ? `?${params}` : "";
   const headers: Record<string, string> = { ...opts.headers };
   if (opts.upgrade !== false) headers.Upgrade = "websocket";
   if (opts.origin !== null) headers.Origin = opts.origin ?? ORIGIN;
@@ -79,4 +89,13 @@ export function setStored(roomId: string, key: string, value: number): Promise<v
 /** a well-formed frame; the relay can't tell it apart from real ciphertext */
 export function fakeMsg(ctChars = 64) {
   return { t: "msg", iv: "A".repeat(16), ct: "B".repeat(ctChars) };
+}
+
+const b64 = (b: Uint8Array) => btoa(String.fromCharCode(...b)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+/** a creator secret and the hash the creator registers with the relay */
+export async function makeOwner(): Promise<{ secret: string; hash: string }> {
+  const raw = crypto.getRandomValues(new Uint8Array(32));
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", raw));
+  return { secret: b64(raw), hash: b64(hash) };
 }

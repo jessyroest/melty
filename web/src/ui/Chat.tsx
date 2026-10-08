@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { navigate } from "../lib/router";
 import type { View } from "../state/session";
 import { useStore } from "../state/session";
@@ -62,6 +62,14 @@ function Room({ view, session }: { view: View; session: SessionApi }) {
   }, [view.isCreator, view.status]);
 
   const openShare = useCallback(() => setSharing(true), []);
+  const actions = useMemo(
+    () => ({
+      me: view.nick,
+      reveal: (id: number) => session.reveal(id),
+      react: (id: number, emoji: Parameters<SessionApi["react"]>[1]) => void session.react(id, emoji),
+    }),
+    [session, view.nick],
+  );
   const link = sharing ? session.shareLink() : null;
 
   return (
@@ -72,6 +80,8 @@ function Room({ view, session }: { view: View; session: SessionApi }) {
         fraction={fraction}
         onShare={openShare}
         onLeave={() => void session.leave("you left. nothing was kept.")}
+        onLock={(on) => session.lock(on)}
+        onMelt={() => session.meltNow()}
       />
       <RoomMessages
         lines={view.lines}
@@ -79,6 +89,7 @@ function Room({ view, session }: { view: View; session: SessionApi }) {
         water={melt * 0.55}
         fraction={fraction}
         onInvite={openShare}
+        actions={actions}
       />
       <RoomComposer view={view} session={session} />
       {link && <ShareSheet link={link} onClose={() => setSharing(false)} />}

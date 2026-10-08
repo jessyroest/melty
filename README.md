@@ -4,7 +4,17 @@ Temporary chat rooms, no account needed. You open a room, share the link (or QR 
 
 Messages are **end-to-end encrypted** (AES-256-GCM). The relay only ever sees a room id and ciphertext, and it stores nothing except when the room expires.
 
-> Status: phase 1 (MVP). The 4-word codes and the hybrid key exchange (phase 2) are not built yet.
+> Status: phases 1 and 3 are done. The 4-word codes and the hybrid key exchange (phase 2) are not built yet.
+
+## Features
+
+- Rooms that melt after 10 minutes, 1 hour or 24 hours. Share them by link or QR code.
+- **Burn after reading.** A message arrives frozen; once someone opens it, it melts away 10 seconds later. The sender's own copy goes 10 seconds after sending.
+- **Typing indicator**, sent encrypted, at most once every 3 seconds.
+- **Reactions** 🧊 💧 🔥 👍, sent encrypted.
+- **Creator controls:**
+  - **lock the room**, so nobody new can join, not even with the link
+  - **melt it now** (press and hold), which wipes the room for everyone immediately
 
 ```
 web/     Vite + React + TypeScript client (UI in English)
@@ -41,6 +51,7 @@ To test with two people, open the room link in a second browser or a private win
 | `pnpm test` | web: crypto (AES-GCM roundtrip; wrong key / tampered ciphertext / IV / AAD fail; HKDF determinism; roomId doesn't leak the secret). relay (in workerd via `@cloudflare/vitest-plugin`): forwarding, nothing stored, expiry + refusal afterwards, every limit, origin check, and **no console output during a full room lifecycle** |
 | `pnpm check:logs` | no logging calls in `relay/src`, Workers observability off, no logpush / tail consumers |
 | `pnpm build && pnpm check:bundle` | the built bundle references only our own origin and the relay: no external URLs, no inline scripts/styles, no `data:` URIs |
+| `pnpm e2e:features` | needs the same setup. Three browsers check typing, reactions, burn-after-read, lock / unlock, and melt-now, plus no CSP violations |
 | `pnpm e2e` | needs the relay and `preview` running. Two real browser sessions chat through the relay. Also checks: the fragment leaves the address bar; no web storage, cookies or IndexedDB are used; no request leaves our origin + relay; no CSP violations |
 | `pnpm check` | test + build + check:bundle + check:logs |
 
@@ -104,7 +115,12 @@ After deploying either way, open the site and check the response headers in devt
    | new rooms per IP | 20 per hour (counted in memory under an HMAC with a random per-instance key; never stored) |
 
 5. **Expiry.** At `expiresAt` an alarm fires. It sends `expired` and closes every socket, then deletes all state. For 24 hours afterwards a tombstone refuses the room id, and then the tombstone is deleted too.
-6. **Client.** The client keeps everything in memory only. Expiry, leaving or closing the tab wipes the secret (zeroed), the key and the messages, and returns to the start screen. The countdown uses the relay's clock.
+6. **Creator controls.**
+   - The creator's browser makes a second random 32-byte secret and gives the relay only its SHA-256.
+   - The relay keeps that hash, and the room's locked flag, on the open sockets in memory, never in storage.
+   - To lock or melt, the creator sends the secret itself; the relay checks it against the hash.
+   - When the room has nobody in it, the creator rights are gone, and a later joiner can't claim them.
+7. **Client.** The client keeps everything in memory only. Expiry, leaving or closing the tab wipes the secret (zeroed), the key and the messages, and returns to the start screen. The countdown uses the relay's clock.
 
 ## Threat model
 
@@ -129,6 +145,9 @@ After deploying either way, open the site and check the response headers in devt
   
   The relay writes no logs, but the data passes through Cloudflare.
 - A malicious relay dropping, delaying, reordering or **replaying** messages within a room. There is no replay protection or padding in phase 1. The relay cannot read or forge messages.
+- **Burn after reading is a courtesy, not a guarantee.** It removes the message from screens running this app. It can't stop screenshots, a modified client, or someone copying the text in the 10 seconds it is open.
+- **Typing notices and reactions are encrypted, but they are extra traffic.** The relay can see that someone in the room is active, though not what they type or which emoji they picked.
+- **Reactions show nicknames, and nicknames are not verified.**
 - (Phase 2) A malicious relay running a man-in-the-middle on the key exchange, if users don't compare the safety code.
 - Memory wiping in JavaScript is best effort. The secret's bytes are zeroed, but the garbage collector decides when the rest actually disappears.
 

@@ -9,6 +9,7 @@ import {
   MAX_CT_CHARS,
   MAX_FRAME_CHARS,
   MAX_PARTICIPANTS,
+  OWNER_RE,
   RATE_BURST,
   RATE_PER_SEC,
 } from "./protocol";
@@ -18,8 +19,18 @@ import { REJECT_HEADER, send, trySend } from "./ws";
  * Per-socket state. Lives on the socket (survives hibernation), never in storage.
  * `id` is a random per-connection tag used only to skip the sender when relaying.
  * `ttl` (seconds) lets later joiners learn the room's total lifetime without storing it.
+ * `owner` (SHA-256 of the creator's secret) and `locked` are room-wide; every socket carries a
+ * copy, so they live as long as somebody is connected and are never written to storage.
  */
-type Attachment = { id: string; tokens: number; last: number; exp: number; ttl: number };
+type Attachment = {
+  id: string;
+  tokens: number;
+  last: number;
+  exp: number;
+  ttl: number;
+  owner?: string;
+  locked: boolean;
+};
 
 /**
  * One Durable Object per room. It relays ciphertext between sockets and stores
@@ -36,8 +47,12 @@ export class Room extends DurableObject<Env> {
     const forced = request.headers.get(REJECT_HEADER);
     if (forced !== null) return this.reject(isErrorCode(forced) ? forced : "bad");
 
-    const create = new URL(request.url).searchParams.get("create");
+    const url = new URL(request.url);
+    const create = url.searchParams.get("create");
+    // the worker has validated `owner`: the creator sends the hash of its secret
+    const ownerParam = url.searchParams.get("owner") ?? undefined;
     const now = Date.now();
+    let creating = false;
     let { expiresAt, goneUntil } = await this.load();
 
     if (goneUntil !== undefined) {
@@ -55,22 +70,33 @@ export class Room extends DurableObject<Env> {
       expiresAt = now + Number(create) * 1000;
       await this.ctx.storage.put("expiresAt", expiresAt);
       await this.ctx.storage.setAlarm(expiresAt);
+      creating = true;
     }
 
     const peers = this.open();
+    const room = peers[0]?.deserializeAttachment() as Attachment | null | undefined;
+    // only the request that creates the room can set the owner; an empty room has no owner left
+    const owner = creating ? ownerParam : room?.owner;
+    const locked = room?.locked ?? false;
+    if (locked && !(owner !== undefined && ownerParam === owner)) return this.reject("locked");
     if (peers.length >= MAX_PARTICIPANTS) return this.reject("full");
-    const ttl =
-      create !== null && peers.length === 0
-        ? Number(create)
-        : ((peers[0]?.deserializeAttachment() as Attachment | null)?.ttl ?? inferTtl(expiresAt - now));
+    const ttl = creating ? Number(create) : (room?.ttl ?? inferTtl(expiresAt - now));
 
     const [client, server] = Object.values(new WebSocketPair());
     this.ctx.acceptWebSocket(server);
-    const att: Attachment = { id: crypto.randomUUID(), tokens: RATE_BURST, last: now, exp: expiresAt, ttl };
+    const att: Attachment = {
+      id: crypto.randomUUID(),
+      tokens: RATE_BURST,
+      last: now,
+      exp: expiresAt,
+      ttl,
+      owner,
+      locked,
+    };
     server.serializeAttachment(att);
 
     const n = peers.length + 1;
-    send(server, { t: "hello", now, expiresAt, ttl, n });
+    send(server, { t: "hello", now, expiresAt, ttl, n, locked });
     for (const p of peers) send(p, { t: "presence", n });
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -106,9 +132,13 @@ export class Room extends DurableObject<Env> {
       send(ws, { t: "error", code: "too_big" });
       return;
     }
-    const frame = parseMsg(message);
+    const frame = parseFrame(message);
     if (frame === "too_big" || frame === null) {
       send(ws, { t: "error", code: frame ?? "bad" });
+      return;
+    }
+    if (frame.t !== "msg") {
+      await this.control(ws, att, frame);
       return;
     }
 
@@ -145,12 +175,31 @@ export class Room extends DurableObject<Env> {
     else await this.ctx.storage.setAlarm(expiresAt);
   }
 
+  /** creator-only actions; the proof is checked against the hash the creator registered */
+  private async control(ws: WebSocket, att: Attachment, f: Exclude<Frame, { t: "msg" }>): Promise<void> {
+    if (att.owner === undefined || (await sha256b64url(f.owner)) !== att.owner) {
+      send(ws, { t: "error", code: "bad" });
+      return;
+    }
+    if (f.t === "melt") {
+      const { expiresAt } = await this.load();
+      await this.expire(expiresAt ?? Date.now(), "melted");
+      return;
+    }
+    for (const p of this.open()) {
+      const a = p.deserializeAttachment() as Attachment;
+      a.locked = f.on;
+      p.serializeAttachment(a);
+      send(p, { t: "locked", on: f.on });
+    }
+  }
+
   /** Close everyone, wipe everything, keep only a tombstone so the id can't be reused right away. */
-  private async expire(expiresAt: number): Promise<void> {
+  private async expire(expiresAt: number, why: "expired" | "melted" = "expired"): Promise<void> {
     for (const ws of this.ctx.getWebSockets()) {
-      send(ws, { t: "expired" });
+      send(ws, { t: why });
       try {
-        ws.close(CLOSE.expired, "room expired");
+        ws.close(CLOSE[why], `room ${why}`);
       } catch {
         // already closed
       }
@@ -200,7 +249,12 @@ function idOf(ws: WebSocket): string | undefined {
   return (ws.deserializeAttachment() as Attachment | null)?.id;
 }
 
-function parseMsg(raw: string): { iv: string; ct: string } | "too_big" | null {
+type Frame =
+  | { t: "msg"; iv: string; ct: string }
+  | { t: "melt"; owner: string }
+  | { t: "lock"; owner: string; on: boolean };
+
+function parseFrame(raw: string): Frame | "too_big" | null {
   let v: unknown;
   try {
     v = JSON.parse(raw);
@@ -208,9 +262,21 @@ function parseMsg(raw: string): { iv: string; ct: string } | "too_big" | null {
     return null;
   }
   if (typeof v !== "object" || v === null) return null;
-  const { t, iv, ct } = v as Record<string, unknown>;
+  const { t, iv, ct, owner, on } = v as Record<string, unknown>;
+  if (t === "melt" || t === "lock") {
+    if (typeof owner !== "string" || !OWNER_RE.test(owner)) return null;
+    if (t === "melt") return { t, owner };
+    return typeof on === "boolean" ? { t, owner, on } : null;
+  }
   if (t !== "msg" || typeof iv !== "string" || typeof ct !== "string") return null;
   if (iv.length !== IV_CHARS || !B64URL_RE.test(iv) || !B64URL_RE.test(ct) || ct.length < 22) return null;
   if (ct.length > MAX_CT_CHARS) return "too_big";
-  return { iv, ct };
+  return { t: "msg", iv, ct };
+}
+
+async function sha256b64url(b64url: string): Promise<string> {
+  const bin = atob(b64url.replace(/-/g, "+").replace(/_/g, "/") + "=");
+  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return btoa(String.fromCharCode(...digest)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }

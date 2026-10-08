@@ -9,6 +9,7 @@
     "check:bundle": "node scripts/check-bundle.mjs",
     "check:logs": "node scripts/check-relay-logs.mjs",
     "e2e": "node scripts/e2e-smoke.mjs",
+    "e2e:features": "node scripts/e2e-features.mjs",
     "check": "pnpm test && pnpm build && pnpm check:bundle && pnpm check:logs"
   },
   "devDependencies": {

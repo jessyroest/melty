@@ -1,6 +1,6 @@
 import { TTL_OPTIONS, type Ttl } from "@relay/protocol";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
-import { createRoom, MELTED, setNotice } from "../state/session";
+import { createRoom, isMelted, setNotice } from "../state/session";
 import { Frost, frostBurst } from "./landing/Frost";
 import { Crack, HeroWords, Snowflake, TtlCube } from "./landing/HeroBits";
 import { MeltCurtain } from "./landing/HeroCurtain";
@@ -67,7 +67,7 @@ const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matche
 const delay = (ms: number) => ({ ["--d" as string]: `${ms}ms` }) as CSSProperties;
 
 export function Home({ notice, onJoin }: { notice: string | null; onJoin: () => void }) {
-  const melted = notice === MELTED;
+  const melted = isMelted(notice);
   const [intro] = useState(() => !introPlayed && !melted);
   const hero = useRef<HTMLElement>(null);
   const stage = useRef<HTMLDivElement>(null);

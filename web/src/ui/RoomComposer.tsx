@@ -3,7 +3,7 @@ import { type CSSProperties, useLayoutEffect, useRef, useState } from "react";
 import { encodedSize, MAX_NICK } from "../crypto/message";
 import type { useStore, View } from "../state/session";
 import { nickHue, RoomCube } from "./RoomCube";
-import { CheckIcon, PencilIcon, SendIcon } from "./RoomIcons";
+import { CheckIcon, FlameIcon, PencilIcon, SendIcon } from "./RoomIcons";
 
 type SessionApi = NonNullable<ReturnType<typeof useStore>["session"]>;
 
@@ -12,8 +12,17 @@ const MAX_HEIGHT = 168;
 export function RoomComposer({ view, session }: { view: View; session: SessionApi }) {
   const [text, setText] = useState("");
   const [sent, setSent] = useState(0);
+  const [burn, setBurn] = useState(false);
   const ta = useRef<HTMLTextAreaElement>(null);
-  const size = encodedSize({ v: 1, kind: "chat", nick: view.nick, text, ts: Date.now() });
+  const size = encodedSize({
+    v: 1,
+    kind: "chat",
+    id: "xxxxxxxxxxx",
+    nick: view.nick,
+    text,
+    ts: Date.now(),
+    ...(burn ? { burn: true as const } : {}),
+  });
   const nearLimit = size > MAX_PLAINTEXT_BYTES * 0.8;
   const over = size > MAX_PLAINTEXT_BYTES;
   const live = view.status === "live";
@@ -32,9 +41,10 @@ export function RoomComposer({ view, session }: { view: View; session: SessionAp
   async function submit() {
     if (!canSend) return;
     const draft = text;
-    if (await session.send(draft)) {
+    if (await session.send(draft, { burn })) {
       setText((t) => (t === draft ? "" : t));
       setSent((s) => s + 1);
+      setBurn(false);
     }
   }
 
@@ -46,6 +56,7 @@ export function RoomComposer({ view, session }: { view: View; session: SessionAp
 
       <div className="composer__top">
         <NickChip nick={view.nick} onSave={(n) => void session.setNick(n)} />
+        <Typing who={view.typing} />
         <span className="composer__keys mono" aria-hidden="true">
           <kbd>enter</kbd> send · <kbd>shift</kbd>+<kbd>enter</kbd> new line
         </span>
@@ -82,7 +93,10 @@ export function RoomComposer({ view, session }: { view: View; session: SessionAp
           autoComplete="off"
           enterKeyHint="send"
           spellCheck
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            if (e.target.value.trim()) session.typing();
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
@@ -92,7 +106,17 @@ export function RoomComposer({ view, session }: { view: View; session: SessionAp
           aria-describedby={nearLimit ? "msg-size" : undefined}
         />
         <button
-          className={`r-send${canSend ? " is-ready" : ""}`}
+          className={`r-burnbtn${burn ? " is-on" : ""}`}
+          type="button"
+          aria-pressed={burn}
+          aria-label="burn after reading"
+          title={burn ? "burn after reading: on" : "burn after reading"}
+          onClick={() => setBurn((b) => !b)}
+        >
+          <FlameIcon />
+        </button>
+        <button
+          className={`r-send${canSend ? " is-ready" : ""}${burn ? " is-burn" : ""}`}
           type="submit"
           disabled={!canSend}
           aria-label="send message"
@@ -104,6 +128,32 @@ export function RoomComposer({ view, session }: { view: View; session: SessionAp
         </button>
       </form>
     </div>
+  );
+}
+
+/** "quiet-otter is typing…", built from encrypted typing notices */
+function Typing({ who }: { who: string[] }) {
+  const text =
+    who.length === 0
+      ? ""
+      : who.length === 1
+        ? `${who[0]} is typing`
+        : who.length === 2
+          ? `${who[0]} and ${who[1]} are typing`
+          : `${who.length} people are typing`;
+  return (
+    <span className={`r-typing${text ? " is-on" : ""}`} aria-live="polite">
+      {text && (
+        <>
+          <span className="r-typing__dots" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </span>
+          {text}
+        </>
+      )}
+    </span>
   );
 }
 

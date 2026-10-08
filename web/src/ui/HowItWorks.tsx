@@ -119,6 +119,10 @@ const DOESNT: ReactNode[] = [
     replay protection or padding yet. it still can't read or forge them.
   </>,
   <>
+    <strong>burn after reading being final.</strong> it removes a message from screens running this app, 10 seconds
+    after it's opened. it can't stop a screenshot, a modified app, or someone copying it in those 10 seconds.
+  </>,
+  <>
     <strong>perfect memory wiping.</strong> in JavaScript it's best effort: the secret's bytes are zeroed, but the
     garbage collector decides when the rest is really gone.
   </>,
@@ -143,6 +147,9 @@ const SPEC: [string, ReactNode][] = [
   ["on the wire", "{iv, ct}"],
   ["relay stores", "expiresAt"],
   ["limits", "8 people · 4 KB plaintext · 5 msg/s per connection · 20 new rooms per IP per hour"],
+  ["encrypted extras", "typing notices · reactions · burn-after-read flag, all inside the ciphertext"],
+  ["creator proof", "32 random bytes kept in memory · relay only holds its SHA-256, on open sockets, never in storage"],
+  ["creator can", "lock the room (no newcomers) · melt it now (wiped for everyone)"],
   ["not yet", "key exchange · forward secrecy · replay protection · padding"],
 ];
 

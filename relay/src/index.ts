@@ -1,4 +1,4 @@
-import { type ErrorCode, TTL_OPTIONS } from "./protocol";
+import { type ErrorCode, OWNER_RE, TTL_OPTIONS } from "./protocol";
 import { REJECT_HEADER } from "./ws";
 
 export { Limiter } from "./limiter";
@@ -23,6 +23,9 @@ export default {
       headers.set(REJECT_HEADER, code);
       return room.fetch(new Request(request, { headers }));
     };
+
+    const owner = url.searchParams.get("owner");
+    if (owner !== null && !OWNER_RE.test(owner)) return refuse("bad");
 
     const create = url.searchParams.get("create");
     if (create !== null) {

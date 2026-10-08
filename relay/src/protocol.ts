@@ -28,12 +28,16 @@ export const CREATE_LIMIT_PER_HOUR = 20;
 /** roomId = 32 bytes, base64url */
 export const ROOM_ID_RE = /^[A-Za-z0-9_-]{43}$/;
 export const B64URL_RE = /^[A-Za-z0-9_-]*$/;
+/** the creator's proof: a 32-byte secret (base64url); the relay only ever learns its SHA-256 until it's used */
+export const OWNER_RE = /^[A-Za-z0-9_-]{43}$/;
 
-export type ErrorCode = "bad" | "not_found" | "gone" | "full" | "too_big" | "rate" | "limit";
+export type ErrorCode = "bad" | "not_found" | "gone" | "full" | "too_big" | "rate" | "limit" | "locked";
 
 export const CLOSE = {
   expired: 4001,
+  melted: 4002,
   bad: 4000,
+  locked: 4023,
   not_found: 4004,
   gone: 4010,
   full: 4009,
@@ -42,10 +46,18 @@ export const CLOSE = {
   limit: 4030,
 } as const;
 
-export type ClientFrame = { t: "msg"; iv: string; ct: string } | { t: "ping" };
+export type ClientFrame =
+  | { t: "msg"; iv: string; ct: string }
+  | { t: "ping" }
+  /** creator only: wipe the room for everyone right now */
+  | { t: "melt"; owner: string }
+  /** creator only: refuse (or allow again) new people */
+  | { t: "lock"; owner: string; on: boolean };
 
 export type ServerFrame =
-  | { t: "hello"; now: number; expiresAt: number; ttl: number; n: number }
+  | { t: "hello"; now: number; expiresAt: number; ttl: number; n: number; locked: boolean }
+  | { t: "locked"; on: boolean }
+  | { t: "melted" }
   | { t: "presence"; n: number }
   | { t: "msg"; iv: string; ct: string }
   | { t: "pong" }

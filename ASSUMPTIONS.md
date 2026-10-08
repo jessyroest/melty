@@ -84,3 +84,34 @@ These are the choices made where the spec left room. Items marked *(approved)* w
 - **Bundle check.** `scripts/check-bundle.mjs` now allows CSS `url(#id)` references. Those point at SVG filters inside the page itself, not at external resources.
 - **e2e selectors.** `scripts/e2e-smoke.mjs` targets `#start`'s button, because "open a room" now appears three times on the landing page.
 - **Viewport.** `interactive-widget=resizes-content` is set so the chat composer stays above the Android keyboard.
+
+## Phase 3 features (2026-10-08)
+
+The five features below were chosen on request: "voeg 5 nieuwe dingen toe, technisch".
+
+- **Creator proof.**
+  - The creator gets a second random 32-byte secret, kept in memory. The relay only gets its SHA-256, sent as `?owner=` when the room is created.
+  - `lock` and `melt` control frames carry the secret. The relay hashes it and compares.
+  - The hash and the locked flag are copied onto every socket's attachment (socket memory). They are never written to storage, so the "only the expiry time in storage" rule still holds.
+  - Consequence: an empty room loses its owner, and a joiner can't claim ownership of an empty room.
+  - When the creator reconnects to a locked room, it passes the hash to get back in. Only the creator's browser and the relay know that hash.
+- **Melt now.**
+  - It runs the same wipe as expiry: close everyone with code 4002, delete storage, and keep the 24-hour tombstone, measured from the original expiry.
+  - The others see "the creator melted the room."
+  - The button needs a 1.5 s press and hold (mouse, touch or keyboard) so it can't be triggered by accident.
+- **Lock.**
+  - Newcomers get the error `locked` (close code 4023).
+  - Everyone inside gets a `locked` frame and an in-room notice.
+- **Burn after reading.**
+  - The message has a `burn: true` flag inside the ciphertext.
+  - Receivers see a frozen bubble. Opening it starts a 10 s countdown, then a drip-away animation, then the line is removed from memory.
+  - The sender's own copy goes 10 s after sending.
+  - It's documented as a courtesy, not a guarantee.
+- **Typing.**
+  - An encrypted `typing` notice is sent at most every 3 s while typing, and shown for 4.5 s.
+  - It is cleared when that person's message arrives or they leave.
+- **Reactions.**
+  - Every chat message now carries a random 8-byte `id` inside the ciphertext.
+  - `react` messages reference it, with a fixed set of four emoji and an on/off toggle.
+  - Reactions are keyed by nickname, which is unverified.
+- **Bug found while building this.** The message pool used `overflow: hidden` while its water layer is translated down out of it. That made the pool scrollable, and focusing a button inside it scrolled the whole pool up. It's now `overflow: clip`.
