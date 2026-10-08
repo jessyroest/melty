@@ -1,4 +1,5 @@
 import { writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
@@ -12,6 +13,7 @@ export default defineConfig(({ mode }) => {
   // share mode: app and relay behind one public host (e.g. a tunnel to `vite preview`),
   // so preview forwards the relay's WebSocket path to the local relay
   const sameHostRelay = relayUrl.host === publicUrl.host;
+  let outDir = "dist";
 
   return {
     plugins: [
@@ -19,8 +21,12 @@ export default defineConfig(({ mode }) => {
       {
         name: "pages-headers",
         apply: "build",
+        // follow --outDir (e.g. dist-share) instead of assuming dist/
+        configResolved(config) {
+          outDir = resolve(config.root, config.build.outDir);
+        },
         closeBundle() {
-          writeFileSync("dist/_headers", pagesHeadersFile(headers));
+          writeFileSync(resolve(outDir, "_headers"), pagesHeadersFile(headers));
         },
       },
     ],

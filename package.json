@@ -10,6 +10,7 @@
     "check:logs": "node scripts/check-relay-logs.mjs",
     "e2e": "node scripts/e2e-smoke.mjs",
     "e2e:features": "node scripts/e2e-features.mjs",
+    "deploy:share": "node scripts/deploy-share.mjs",
     "check": "pnpm test && pnpm build && pnpm check:bundle && pnpm check:logs"
   },
   "devDependencies": {

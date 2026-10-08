@@ -24,7 +24,7 @@ scripts/ bundle / log checks and a browser end-to-end smoke test
 
 ## Run locally
 
-Requirements: Node 20+ (tested on 24) and pnpm 10.
+Requirements: Node 22+ (wrangler needs it; tested on 24) and pnpm 10.
 
 ```sh
 pnpm install
