@@ -1,0 +1,17 @@
+{
+  "name": "projectnaam",
+  "private": true,
+  "packageManager": "pnpm@10.34.6",
+  "scripts": {
+    "dev": "pnpm -r --parallel --stream dev",
+    "build": "pnpm --filter @projectnaam/web build",
+    "test": "pnpm -r test",
+    "check:bundle": "node scripts/check-bundle.mjs",
+    "check:logs": "node scripts/check-relay-logs.mjs",
+    "e2e": "node scripts/e2e-smoke.mjs",
+    "check": "pnpm test && pnpm build && pnpm check:bundle && pnpm check:logs"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.64.0"
+  }
+}

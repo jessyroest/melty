@@ -1,0 +1,59 @@
+/* design tokens. dark is the default; light follows prefers-color-scheme. */
+:root {
+  color-scheme: dark;
+
+  --bg: #0a1024;
+  --bg-deep: #060a18;
+  --bg-glow: rgba(63, 211, 230, 0.12);
+  --text: #f2f7fb;
+  --muted: #a3b3cc;
+  --accent: #7fe7f2;
+  --accent-strong: #3fd3e6;
+  --on-accent: #0b1530;
+  --panel: rgba(150, 200, 255, 0.07);
+  --panel-strong: rgba(150, 200, 255, 0.12);
+  --panel-border: rgba(170, 225, 255, 0.18);
+  --frost: rgba(220, 245, 255, 0.5);
+  --bubble-mine: rgba(127, 231, 242, 0.16);
+  --warn-bg: rgba(255, 196, 120, 0.1);
+  --warn-border: rgba(255, 196, 120, 0.4);
+  --warn-text: #ffd9a3;
+  --danger: #ff9a9a;
+  --focus: #7fe7f2;
+  --puddle: rgba(127, 231, 242, 0.55);
+  --steam: rgba(220, 240, 255, 0.55);
+
+  --radius: 18px;
+  --radius-sm: 12px;
+  --blur: 16px;
+  --font: "Quicksand Variable", "Quicksand", ui-rounded, "SF Pro Rounded", "Nunito", system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+
+    --bg: #f3f9fc;
+    --bg-deep: #e4f2f8;
+    --bg-glow: rgba(63, 211, 230, 0.18);
+    --text: #0b1530;
+    --muted: #46566f;
+    --accent: #0a7e95;
+    --accent-strong: #08687b;
+    --on-accent: #ffffff;
+    --panel: rgba(255, 255, 255, 0.62);
+    --panel-strong: rgba(255, 255, 255, 0.85);
+    --panel-border: rgba(11, 21, 48, 0.12);
+    --frost: rgba(255, 255, 255, 0.9);
+    --bubble-mine: rgba(10, 126, 149, 0.12);
+    --warn-bg: rgba(200, 120, 20, 0.08);
+    --warn-border: rgba(170, 100, 10, 0.35);
+    --warn-text: #7a4300;
+    --danger: #b3261e;
+    --focus: #0a7e95;
+    --puddle: rgba(63, 190, 214, 0.45);
+    --steam: rgba(11, 21, 48, 0.25);
+  }
+}

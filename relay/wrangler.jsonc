@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "projectnaam-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  // no Workers Logs / traces: the relay must not produce logs at all
+  "observability": { "enabled": false },
+  "durable_objects": {
+    "bindings": [
+      { "name": "ROOM", "class_name": "Room" },
+      { "name": "LIMITER", "class_name": "Limiter" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room", "Limiter"] }],
+  "vars": {
+    // comma-separated list of web origins allowed to open a socket
+    "ALLOWED_ORIGINS": "http://localhost:5173,http://localhost:4173"
+  }
+}
