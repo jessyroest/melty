@@ -1,0 +1,210 @@
+/* ---- hero -------------------------------------------------------------------- */
+
+.l-hero {
+  position: relative;
+  max-width: 1200px;
+  margin: 0 auto;
+  min-height: calc(100svh - 61px);
+  padding: 12px 16px 64px;
+  display: grid;
+  align-items: center;
+  gap: 8px;
+}
+.l-hero .frost {
+  /* bleed the crystals to the edges of the screen */
+  left: 50%;
+  width: 100vw;
+  transform: translateX(-50%);
+}
+.l-hero__art {
+  position: relative;
+  display: grid;
+  justify-items: center;
+}
+.l-hero__art::before {
+  content: "";
+  position: absolute;
+  inset: 8% 10% 0;
+  background: radial-gradient(closest-side, var(--glow), transparent);
+  filter: blur(10px);
+  z-index: -1;
+}
+.l-hero__mascot svg {
+  width: min(62vw, 300px);
+  height: auto;
+}
+.l-hero__mascot .live-mascot {
+  animation: float 5.5s ease-in-out infinite;
+}
+.l-hero__psst {
+  position: absolute;
+  right: 6%;
+  top: 6%;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  transform: rotate(6deg);
+}
+.l-hero__text {
+  position: relative;
+}
+.l-hero__join {
+  margin: 14px 0 0;
+  color: var(--muted);
+}
+.chips {
+  list-style: none;
+  padding: 0;
+  margin: 26px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.chips li::before {
+  content: "❄ ";
+  color: var(--accent);
+}
+
+@media (min-width: 900px) {
+  .l-hero {
+    grid-template-columns: 0.95fr 1.05fr;
+    gap: 40px;
+  }
+  .l-hero__mascot svg {
+    width: min(36vw, 460px);
+  }
+}
+
+/* poke me */
+.poke {
+  position: relative;
+  display: inline-block;
+}
+.poke__btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 24px;
+  -webkit-tap-highlight-color: transparent;
+}
+.poke__bubble {
+  position: absolute;
+  left: 50%;
+  top: 2%;
+  transform: translate(-50%, 8px) scale(0.9);
+  opacity: 0;
+  pointer-events: none;
+  white-space: nowrap;
+  padding: 8px 14px;
+  border-radius: 16px;
+  background: var(--text);
+  color: var(--bg);
+  font-weight: 700;
+  font-size: 0.95rem;
+  transition: opacity 200ms ease, transform 260ms cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+.poke__bubble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 12px;
+  height: 12px;
+  background: inherit;
+  transform: translateX(-50%) rotate(45deg);
+  border-radius: 2px;
+}
+.poke__bubble.is-on {
+  opacity: 1;
+  transform: translate(-50%, -100%) scale(1);
+}
+
+/* ---- the screen drips away after a room melts ------------------------------------- */
+
+.curtain {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  pointer-events: none;
+}
+.curtain span {
+  flex: 1;
+  margin: 0 -1px;
+  background: linear-gradient(var(--flood), var(--accent-strong));
+  border-radius: 0 0 999px 999px;
+  animation: curtain-drop 1.5s cubic-bezier(0.6, 0, 0.75, 0.4) calc(300ms + var(--r) * 500ms) forwards;
+}
+@keyframes curtain-drop {
+  to {
+    transform: translateY(115%);
+  }
+}
+
+.notice--melted {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+
+/* ---- start panel ------------------------------------------------------------- */
+
+.start {
+  padding: 20px;
+  display: grid;
+  gap: 18px;
+  max-width: 440px;
+}
+.ttl {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+.ttl legend {
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+.ttl__options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.ttl__option {
+  position: relative;
+}
+.ttl__option input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  cursor: pointer;
+}
+.ttl__option span {
+  display: grid;
+  place-items: center;
+  min-height: 44px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  font-weight: 600;
+}
+.ttl__option input:checked + span {
+  background: var(--bubble-mine);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.ttl__option input:focus-visible + span {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.notice {
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-strong);
+  border: 1px solid var(--panel-border);
+  max-width: 440px;
+}

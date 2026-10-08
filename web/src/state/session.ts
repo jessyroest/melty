@@ -26,6 +26,8 @@ export type View = {
   hint: string | null;
 };
 
+export const MELTED = "that room melted. everything's gone.";
+
 const MAX_LINES = 500;
 const MAX_RETRIES = 3;
 
@@ -164,7 +166,7 @@ class Session {
       case "msg":
         return this.receive(e.sealed);
       case "expired":
-        return this.end("that room melted. everything's gone.");
+        return this.end(MELTED);
       case "error": {
         const fatal = FATAL[e.code];
         if (fatal) return this.end(fatal);
@@ -217,7 +219,7 @@ class Session {
     if (expiresAt === null) return;
     const ms = expiresAt - (Date.now() + offset) + 1500;
     // setTimeout can't take more than ~24.8 days, fine for a 24h max
-    this.expiryTimer = setTimeout(() => this.end("that room melted. everything's gone."), Math.max(0, ms));
+    this.expiryTimer = setTimeout(() => this.end(MELTED), Math.max(0, ms));
   }
 
   private flash(hint: string): void {

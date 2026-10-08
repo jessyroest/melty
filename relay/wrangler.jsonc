@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "projectnaam-relay",
+  "name": "melty-relay",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-01",
   // no Workers Logs / traces: the relay must not produce logs at all

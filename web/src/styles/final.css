@@ -1,0 +1,123 @@
+/* ---- the end ----------------------------------------------------------------------- */
+
+.l-final {
+  position: relative;
+  border-top: 1px solid var(--line);
+  background: radial-gradient(70% 80% at 80% 100%, var(--glow), transparent 70%);
+}
+.l-final__inner {
+  position: relative;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: clamp(80px, 14vh, 160px) 16px 56px;
+}
+.drip-text {
+  margin: 0 0 56px;
+  font-size: clamp(3.6rem, 13vw, 11.5rem);
+  font-weight: 700;
+  letter-spacing: -0.06em;
+  line-height: 0.88;
+}
+.drip-text span {
+  position: relative;
+  display: inline-block;
+}
+.drip-text .drip::after {
+  content: "";
+  position: absolute;
+  left: var(--x);
+  top: 80%;
+  width: 0.075em;
+  height: 0;
+  border-radius: 0 0 0.06em 0.06em;
+  background: currentColor;
+  animation: drip-grow 5s cubic-bezier(0.5, 0, 0.6, 1) var(--dd) infinite;
+}
+.drip-text .drip::before {
+  content: "";
+  position: absolute;
+  left: var(--x);
+  top: calc(80% + var(--h));
+  width: 0.075em;
+  height: 0.09em;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0;
+  animation: drip-drop 5s ease-in var(--dd) infinite;
+}
+@keyframes drip-grow {
+  0% {
+    height: 0;
+  }
+  55%,
+  80% {
+    height: var(--h);
+  }
+  100% {
+    height: 0;
+  }
+}
+@keyframes drip-drop {
+  0%,
+  55% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+  60% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 0;
+    transform: translateY(1.2em);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.l-final__row {
+  display: grid;
+  gap: 24px;
+  align-items: end;
+}
+.l-final__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.l-final__actions .btn--big {
+  width: auto;
+  padding-left: 30px;
+  padding-right: 30px;
+}
+.l-final__mascot {
+  justify-self: end;
+}
+.l-final__mascot svg {
+  width: min(46vw, 220px);
+  height: auto;
+}
+@media (min-width: 760px) {
+  .l-final__row {
+    grid-template-columns: 1fr auto;
+  }
+}
+
+.l-footer {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 26px 16px 36px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  border-top: 1px solid var(--line);
+  font-size: 0.9rem;
+}
+.l-footer__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 1.1rem;
+}

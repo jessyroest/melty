@@ -1,0 +1,109 @@
+/* ---- type ------------------------------------------------------------------ */
+
+.h-display {
+  font-size: clamp(3.1rem, 8.6vw, 7.4rem);
+  line-height: 0.92;
+  letter-spacing: -0.045em;
+  font-weight: 700;
+  margin: 0 0 22px;
+}
+.h-xl {
+  font-size: clamp(2.5rem, 6vw, 4.8rem);
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+  font-weight: 700;
+  margin: 0 0 20px;
+}
+.h-lg {
+  font-size: clamp(1.7rem, 3.4vw, 2.6rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  font-weight: 700;
+  margin: 0 0 16px;
+}
+.lead {
+  font-size: clamp(1.08rem, 1.6vw, 1.3rem);
+  color: var(--muted);
+  max-width: 36ch;
+}
+.eyebrow {
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  margin: 0 0 18px;
+}
+.mono {
+  font-family: var(--mono);
+}
+.linklike {
+  font: inherit;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.link-arrow {
+  display: inline-block;
+  margin-top: 8px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.link-arrow:hover {
+  text-decoration: underline;
+}
+
+/* ---- shared layout ------------------------------------------------------------ */
+
+.landing {
+  overflow-x: clip;
+}
+.l-section {
+  position: relative;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: clamp(88px, 15vh, 170px) 16px;
+}
+.reveal {
+  opacity: 0;
+  transform: translateY(26px);
+  transition: opacity 800ms ease, transform 800ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.reveal.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+.frost {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* ---- reduced motion ---------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .l-uses__list li {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .melt-line.is-melting .melt-ch {
+    opacity: 0.35;
+    color: var(--accent);
+  }
+  .melt-line.is-melting .melt-line__text {
+    text-decoration: line-through;
+    text-decoration-color: var(--accent);
+  }
+  .curtain {
+    display: none;
+  }
+  .l-melt__steps li {
+    transition: none;
+  }
+}

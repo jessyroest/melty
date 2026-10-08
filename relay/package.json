@@ -1,5 +1,5 @@
 {
-  "name": "@projectnaam/relay",
+  "name": "@melty/relay",
   "private": true,
   "type": "module",
   "scripts": {

@@ -1,0 +1,77 @@
+/* ---- things melty never asks for ------------------------------------------------- */
+
+.l-never {
+  display: grid;
+  gap: 40px;
+}
+.l-never__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.melt-line {
+  position: relative;
+  font-size: clamp(2.1rem, 6.4vw, 4.6rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.12;
+}
+.melt-ch {
+  display: inline-block;
+  transform-origin: 50% 0;
+}
+.melt-line.is-melting .melt-ch {
+  animation: melt-ch 1.8s cubic-bezier(0.55, 0, 0.75, 0.45) var(--d) forwards;
+}
+@keyframes melt-ch {
+  0% {
+    transform: none;
+  }
+  35% {
+    transform: translateY(0.04em) scaleY(1.12);
+    color: var(--accent);
+  }
+  100% {
+    transform: translate(var(--x), 0.3em) scaleY(var(--s));
+    color: var(--accent);
+    opacity: 0.1;
+    filter: blur(4px);
+  }
+}
+.melt-line__puddle {
+  position: absolute;
+  left: 0;
+  bottom: 0.06em;
+  height: 0.09em;
+  width: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  opacity: 0;
+  filter: blur(2px);
+}
+.melt-line.is-melting .melt-line__puddle {
+  animation: puddle 1.4s ease-out 900ms forwards;
+}
+@keyframes puddle {
+  to {
+    width: 70%;
+    opacity: 0.45;
+  }
+}
+.l-never__end {
+  margin: 0;
+  color: var(--accent);
+}
+@media (min-width: 900px) {
+  .l-never {
+    grid-template-columns: 0.8fr 1.2fr;
+    align-items: start;
+  }
+  .l-never__intro {
+    position: sticky;
+    top: 120px;
+  }
+  .l-never__end {
+    grid-column: 2;
+  }
+}

@@ -4,6 +4,7 @@ import { encodedSize, MAX_NICK } from "../crypto/message";
 import { navigate } from "../lib/router";
 import type { View } from "../state/session";
 import { useStore } from "../state/session";
+import { LiveMascot } from "./LiveMascot";
 import { Mascot } from "./Mascot";
 import { ShareSheet } from "./ShareSheet";
 import { formatLeft, spokenLeft, useNow } from "./time";
@@ -31,6 +32,20 @@ type SessionApi = NonNullable<ReturnType<typeof useStore>["session"]>;
 
 function Room({ view, session }: { view: View; session: SessionApi }) {
   const [sharing, setSharing] = useState(false);
+  const now = useNow(1000);
+  const { leftMs, fraction } = timeLeft(view, now);
+  const melt = view.expiresAt === null ? 0 : 1 - fraction;
+
+  // the countdown in the tab title, so you can see it from another tab
+  useEffect(() => {
+    if (view.expiresAt !== null) document.title = `${formatLeft(leftMs)} · melty`;
+  }, [leftMs, view.expiresAt]);
+  useEffect(() => {
+    const prev = document.title;
+    return () => {
+      document.title = prev;
+    };
+  }, []);
   const shownOnce = useRef(false);
 
   // the creator gets the invite sheet once, right away
@@ -46,7 +61,7 @@ function Room({ view, session }: { view: View; session: SessionApi }) {
   return (
     <div className="room">
       <RoomBar view={view} onShare={() => setSharing(true)} onLeave={() => void session.leave("you left. nothing was kept.")} />
-      <Messages view={view} />
+      <Messages view={view} melt={melt} />
       <Composer view={view} session={session} />
       {link && <ShareSheet link={link} onClose={() => setSharing(false)} />}
     </div>
@@ -56,13 +71,12 @@ function Room({ view, session }: { view: View; session: SessionApi }) {
 function RoomBar({ view, onShare, onLeave }: { view: View; onShare: () => void; onLeave: () => void }) {
   const now = useNow(1000);
   const known = view.expiresAt !== null && view.ttlMs !== null;
-  const leftMs = known ? view.expiresAt! - (now + view.offset) : 0;
-  const fraction = known ? leftMs / view.ttlMs! : 1;
+  const { leftMs, fraction } = timeLeft(view, now);
   const spoken = known ? spokenLeft(leftMs) : "";
 
   return (
     <header className="roombar panel">
-      <Mascot left={fraction} size={76} className="roombar__mascot" />
+      <LiveMascot left={fraction} size={76} className="roombar__mascot" bump={view.lines.length} />
       <div className="roombar__info">
         <div className="roombar__time" role="timer" aria-hidden="true">
           {known ? formatLeft(leftMs) : "…"}
@@ -101,14 +115,26 @@ function RoomBar({ view, onShare, onLeave }: { view: View; onShare: () => void; 
   );
 }
 
-function Messages({ view }: { view: View }) {
+function timeLeft(view: View, now: number): { leftMs: number; fraction: number } {
+  if (view.expiresAt === null || view.ttlMs === null) return { leftMs: 0, fraction: 1 };
+  const leftMs = view.expiresAt - (now + view.offset);
+  return { leftMs, fraction: Math.max(0, Math.min(1, leftMs / view.ttlMs)) };
+}
+
+function Messages({ view, melt }: { view: View; melt: number }) {
   const end = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     end.current?.scrollIntoView({ block: "end" });
   }, [view.lines.length]);
 
   return (
-    <div className="messages panel" role="log" aria-live="polite" aria-label="messages">
+    <div
+      className="messages panel"
+      role="log"
+      aria-live="polite"
+      aria-label="messages"
+      style={{ ["--water" as string]: (melt * 0.55).toFixed(4) }}
+    >
       {view.lines.length === 0 && (
         <p className="messages__empty">
           {view.isCreator ? "it's quiet. invite someone." : "it's quiet. say hi."}

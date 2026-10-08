@@ -4,7 +4,7 @@ These are the choices made where the spec left room. Items marked *(approved)* w
 
 ## Project
 
-- **Name.** Folder `projectnaam`, packages `@projectnaam/web` and `@projectnaam/relay`, UI title `PROJECTNAAM`. These are placeholders until a name is chosen. *(approved)*
+- **Name.** `melty`, chosen 2026-10-08 on request ("geef het een goede naam"), after a quick search turned up no existing chat product with that name. Packages `@melty/web` and `@melty/relay`, worker `melty-relay`.
 - **pnpm.** Installed via `npm i -g pnpm`, because `corepack enable` had no write access to `Program Files` on the dev machine. It is pinned in `packageManager`.
 - **Shared protocol.** The wire protocol lives in `relay/src/protocol.ts`, and `web` imports it through an alias (`@relay/protocol`). There is no third `shared` package, so the spec's two-package layout stays intact.
 - **Test tooling.** `@cloudflare/vitest-pool-workers` turned out to be deprecated and renamed to `@cloudflare/vitest-plugin`; the relay tests use the new package. Vitest is pinned at 4.1 because the plugin requires it.
@@ -75,4 +75,4 @@ These are the choices made where the spec left room. Items marked *(approved)* w
 - **Reduced motion.** `prefers-reduced-motion` turns off every animation and transition. The melt state still shows, as static steps.
 - **Condensation.** A faint droplet texture on panels gets stronger on hover and focus.
 - **Light mode.** It follows `prefers-color-scheme`; dark is the default.
-- **OG image.** It has no text, because the product name is still a placeholder; the name can be composited later. `og:image` uses `VITE_PUBLIC_ORIGIN`, because crawlers need an absolute URL.
+- **OG image.** It has no text; the name can be composited on later. `og:image` uses `VITE_PUBLIC_ORIGIN`, because crawlers need an absolute URL.

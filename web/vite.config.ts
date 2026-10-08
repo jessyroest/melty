@@ -6,7 +6,12 @@ import { pagesHeadersFile, securityHeaders } from "./headers.mjs";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "VITE_");
-  const headers = securityHeaders(env.VITE_RELAY_URL || "ws://localhost:8787");
+  const relayUrl = new URL(env.VITE_RELAY_URL || "ws://localhost:8787");
+  const publicUrl = new URL(env.VITE_PUBLIC_ORIGIN || "http://localhost:4173");
+  const headers = securityHeaders(relayUrl.href);
+  // share mode: app and relay behind one public host (e.g. a tunnel to `vite preview`),
+  // so preview forwards the relay's WebSocket path to the local relay
+  const sameHostRelay = relayUrl.host === publicUrl.host;
 
   return {
     plugins: [
@@ -30,7 +35,11 @@ export default defineConfig(({ mode }) => {
     },
     // strict CSP is enforced in preview and production. The dev server injects
     // inline scripts/styles for hot reload, so it runs without one.
-    preview: { headers },
+    preview: {
+      headers,
+      allowedHosts: [publicUrl.hostname],
+      proxy: sameHostRelay ? { "/rooms": { target: "ws://localhost:8787", ws: true } } : undefined,
+    },
     test: { environment: "node", include: ["src/**/*.test.ts"] },
   };
 });

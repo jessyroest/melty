@@ -1,0 +1,102 @@
+/* ---- how the ice works ------------------------------------------------------------- */
+
+.l-works__head {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 48px;
+}
+.l-works__grid {
+  display: grid;
+  gap: 14px;
+}
+.l-card {
+  position: relative;
+  padding: 22px 20px 24px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--panel);
+}
+.l-card h3 {
+  font-size: 1.3rem;
+  letter-spacing: -0.02em;
+  margin: 22px 0 8px;
+}
+.l-card p {
+  margin: 0;
+  color: var(--muted);
+}
+.l-works__grid .l-card:nth-child(2) {
+  transition-delay: 90ms;
+}
+.l-works__grid .l-card:nth-child(3) {
+  transition-delay: 180ms;
+}
+.l-works__grid .l-card:nth-child(4) {
+  transition-delay: 270ms;
+}
+.illo {
+  margin: 0;
+  min-height: 5.6em;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--bg-deep);
+  border: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow: hidden;
+}
+.illo--clock {
+  display: grid;
+  align-content: center;
+  gap: 12px;
+}
+.illo__bar {
+  display: block;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.illo__bar span {
+  display: block;
+  height: 100%;
+  width: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent-strong), var(--accent));
+  transform-origin: left;
+  animation: drain 9s linear infinite;
+}
+@keyframes drain {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+.caret {
+  color: var(--accent);
+  animation: blink 1s steps(1) infinite;
+}
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+@media (min-width: 640px) {
+  .l-works__grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (min-width: 1040px) {
+  .l-works__head {
+    grid-template-columns: 1fr 1fr;
+    align-items: end;
+  }
+  .l-works__grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}

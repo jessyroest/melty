@@ -1,4 +1,4 @@
-# PROJECTNAAM
+# melty
 
 Temporary chat rooms, no account needed. You open a room, share the link (or QR code), and talk. When the timer runs out, the room melts: the relay closes every connection and deletes the room, and every browser wipes its messages and keys.
 
@@ -28,8 +28,8 @@ pnpm dev
 
 ```sh
 pnpm build
-pnpm --filter @projectnaam/relay dev      # terminal 1
-pnpm --filter @projectnaam/web preview    # terminal 2 → http://localhost:4173
+pnpm --filter @melty/relay dev      # terminal 1
+pnpm --filter @melty/web preview    # terminal 2 → http://localhost:4173
 ```
 
 To test with two people, open the room link in a second browser or a private window. A second tab in the same window also works, because nothing is shared between tabs.
@@ -50,14 +50,14 @@ The e2e test uses your locally installed Edge (`BROWSER_CHANNEL=chrome` for Chro
 
 ### Relay → Cloudflare Workers
 
-1. In `relay/wrangler.jsonc`, set `ALLOWED_ORIGINS` to your web origin(s), for example `https://projectnaam.pages.dev`.
+1. In `relay/wrangler.jsonc`, set `ALLOWED_ORIGINS` to your web origin(s), for example `https://melty.pages.dev`.
 2. Deploy:
    ```sh
    cd relay
    npx wrangler login
    pnpm deploy
    ```
-   Note the URL, e.g. `https://projectnaam-relay.<account>.workers.dev`. The app connects to it as `wss://…`.
+   Note the URL, e.g. `https://melty-relay.<account>.workers.dev`. The app connects to it as `wss://…`.
 3. Leave observability **off**; `pnpm check:logs` fails if it's on. Don't add Logpush or tail workers.
 
 ### Web → Cloudflare Pages
@@ -68,7 +68,7 @@ Build settings:
 - build command: `pnpm build`
 - output directory: `dist`
 - environment variables:
-  - `VITE_RELAY_URL=wss://projectnaam-relay.<account>.workers.dev`
+  - `VITE_RELAY_URL=wss://melty-relay.<account>.workers.dev`
   - `VITE_PUBLIC_ORIGIN=https://<your pages domain>`
 
 The build writes `dist/_headers` with the CSP (`connect-src` set to your relay), `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff` and a `Permissions-Policy` that turns off camera, microphone and geolocation. Pages serves `index.html` for `/r` and `/how` by itself.
@@ -76,7 +76,7 @@ The build writes `dist/_headers` with the CSP (`connect-src` set to your relay),
 ### Web → Vercel (alternative)
 
 ```sh
-VITE_RELAY_URL=wss://projectnaam-relay.<account>.workers.dev pnpm --filter @projectnaam/web gen:vercel
+VITE_RELAY_URL=wss://melty-relay.<account>.workers.dev pnpm --filter @melty/web gen:vercel
 ```
 
 This writes `web/vercel.json` with the same headers plus SPA rewrites. Then:

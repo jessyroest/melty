@@ -1,0 +1,35 @@
+/* ---- honesty ----------------------------------------------------------------------- */
+
+.l-honest {
+  display: grid;
+  gap: 36px;
+}
+.l-honest__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.l-honest__list li {
+  position: relative;
+  padding: 20px 0 20px 40px;
+  border-bottom: 1px solid var(--line);
+  font-size: 1.1rem;
+  color: var(--muted);
+}
+.l-honest__list li::before {
+  content: "✕";
+  position: absolute;
+  left: 4px;
+  top: 20px;
+  color: var(--danger);
+  font-weight: 700;
+}
+.l-honest__list strong {
+  color: var(--text);
+}
+@media (min-width: 900px) {
+  .l-honest {
+    grid-template-columns: 0.9fr 1.1fr;
+    gap: 64px;
+  }
+}

@@ -3,15 +3,28 @@
  * (1 = fresh, 0 = gone). Everything is derived from it: the cube shrinks and
  * slumps, a puddle spreads, and at 0 only steam is left.
  *
- * Geometry is drawn on a 200x200 canvas with the cube standing on y=176.
+ * `look` moves the pupils (-1..1 on both axes), `blink` closes the eyes and
+ * `mood` swaps the mouth. Geometry is drawn on a 200x200 canvas with the cube
+ * standing on y=176.
  */
+export type Mood = "happy" | "surprised";
+
 const NAVY = "#0B1530";
 const FRONT = "#AEEFF7";
 const TOP = "#D4FAFD";
 const SIDE = "#6FD6E6";
 const GROUND = 176;
 
-export function Mascot({ left, size = 120, className }: { left: number; size?: number; className?: string }) {
+type Props = {
+  left: number;
+  size?: number;
+  className?: string;
+  look?: { x: number; y: number };
+  blink?: boolean;
+  mood?: Mood;
+};
+
+export function Mascot({ left, size = 120, className, look, blink = false, mood = "happy" }: Props) {
   const f = Math.min(1, Math.max(0, left));
   const gone = f <= 0;
   const melt = 1 - f;
@@ -34,6 +47,10 @@ export function Mascot({ left, size = 120, className }: { left: number; size?: n
   const skirt =
     `M${x0} ${GROUND} C${x0 + W * 0.12} ${GROUND - h * 0.15} ${x0 + W * 0.14} ${GROUND - h} ${x0 + W * 0.3} ${GROUND - h} ` +
     `L${x1 - W * 0.3} ${GROUND - h} C${x1 - W * 0.14} ${GROUND - h} ${x1 - W * 0.12} ${GROUND - h * 0.15} ${x1} ${GROUND} Z`;
+
+  const px = (look?.x ?? 0) * 3.5;
+  const py = (look?.y ?? 0) * 3;
+  const eyeY = blink ? 0.12 : 1;
 
   return (
     <svg
@@ -73,13 +90,21 @@ export function Mascot({ left, size = 120, className }: { left: number; size?: n
 
           {/* face */}
           <g className="mascot__face" style={{ transform: faceTransform }}>
-            <ellipse cx="76" cy="114" rx="6.5" ry="8.5" fill={NAVY} />
-            <ellipse cx="114" cy="114" rx="6.5" ry="8.5" fill={NAVY} />
-            <circle cx="78" cy="110" r="2.2" fill="#fff" />
-            <circle cx="116" cy="110" r="2.2" fill="#fff" />
+            <g className="mascot__eyes" style={{ transform: `translate(${px}px, ${py}px)` }}>
+              <g className="mascot__eye" style={{ transform: `scaleY(${eyeY})` }}>
+                <ellipse cx="76" cy="114" rx="6.5" ry="8.5" fill={NAVY} />
+                {!blink && <circle cx="78" cy="110" r="2.2" fill="#fff" />}
+              </g>
+              <g className="mascot__eye mascot__eye--r" style={{ transform: `scaleY(${eyeY})` }}>
+                <ellipse cx="114" cy="114" rx="6.5" ry="8.5" fill={NAVY} />
+                {!blink && <circle cx="116" cy="110" r="2.2" fill="#fff" />}
+              </g>
+            </g>
             <ellipse cx="64" cy="128" rx="7.5" ry="4.5" fill="#FFB3C1" opacity="0.9" />
             <ellipse cx="126" cy="128" rx="7.5" ry="4.5" fill="#FFB3C1" opacity="0.9" />
-            {f > 0.25 ? (
+            {mood === "surprised" ? (
+              <ellipse cx="95" cy="129" rx="5" ry="6" fill={NAVY} />
+            ) : f > 0.25 ? (
               <path d="M87 125 Q95 133 103 125" fill="none" stroke={NAVY} strokeWidth="4" strokeLinecap="round" />
             ) : (
               <path d="M88 129 Q95 124 102 129" fill="none" stroke={NAVY} strokeWidth="4" strokeLinecap="round" />

@@ -22,13 +22,19 @@
   --focus: #7fe7f2;
   --puddle: rgba(127, 231, 242, 0.55);
   --steam: rgba(220, 240, 255, 0.55);
+  --water-color: rgba(127, 231, 242, 0.09);
+  --frost-flake: rgba(205, 242, 255, 0.85);
+  --glow: rgba(63, 211, 230, 0.28);
+  --line: rgba(170, 225, 255, 0.14);
+  --flood: #7fe7f2;
+  --on-flood: #0b1530;
 
   --radius: 18px;
   --radius-sm: 12px;
   --blur: 16px;
   --font: "Quicksand Variable", "Quicksand", ui-rounded, "SF Pro Rounded", "Nunito", system-ui, -apple-system,
     "Segoe UI", Roboto, sans-serif;
-  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+  --mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
 }
 
 @media (prefers-color-scheme: light) {
@@ -55,5 +61,11 @@
     --focus: #0a7e95;
     --puddle: rgba(63, 190, 214, 0.45);
     --steam: rgba(11, 21, 48, 0.25);
+    --water-color: rgba(10, 126, 149, 0.08);
+    --frost-flake: rgba(10, 126, 149, 0.45);
+    --glow: rgba(63, 211, 230, 0.3);
+    --line: rgba(11, 21, 48, 0.12);
+    --flood: #0b1530;
+    --on-flood: #dff9fc;
   }
 }

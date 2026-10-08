@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // End-to-end smoke test in a real browser (local Edge/Chrome via playwright-core).
-// Needs the relay (`pnpm --filter @projectnaam/relay dev`) and the built app
-// served with production headers (`pnpm --filter @projectnaam/web preview`).
+// Needs the relay (`pnpm --filter @melty/relay dev`) and the built app
+// served with production headers (`pnpm --filter @melty/web preview`).
 //
 // Checks: two people can talk through the relay; the fragment leaves the
 // address bar; nothing lands in web storage or cookies; no request leaves our

@@ -1,0 +1,39 @@
+/* ---- how it works ---- */
+
+.how {
+  max-width: 760px;
+  margin: 0 auto;
+  display: grid;
+  gap: 16px;
+}
+.how__head {
+  text-align: center;
+  display: grid;
+  justify-items: center;
+}
+.how__head h1 {
+  margin: 8px 0 4px;
+  font-size: clamp(2rem, 7vw, 3rem);
+}
+.lead {
+  color: var(--muted);
+  font-size: 1.1rem;
+  margin: 0;
+}
+.how__section {
+  padding: 4px 22px 16px;
+}
+.how__section li {
+  margin-bottom: 8px;
+}
+.list {
+  padding-left: 1.2rem;
+}
+.list--yes li::marker {
+  content: "✓  ";
+  color: var(--accent);
+}
+.list--no li::marker {
+  content: "✕  ";
+  color: var(--danger);
+}

@@ -1,6 +1,18 @@
 import "@fontsource-variable/quicksand/wght.css";
 import "./styles/tokens.css";
+import "@fontsource-variable/jetbrains-mono/wght.css";
 import "./styles/app.css";
+import "./styles/landing.css";
+import "./styles/mascot.css";
+import "./styles/hero.css";
+import "./styles/never.css";
+import "./styles/melt.css";
+import "./styles/works.css";
+import "./styles/uses.css";
+import "./styles/honest.css";
+import "./styles/final.css";
+import "./styles/room.css";
+import "./styles/how.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";

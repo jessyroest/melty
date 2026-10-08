@@ -1,0 +1,134 @@
+/* ---- the mascot, alive --------------------------------------------------------- */
+
+.live-mascot {
+  display: inline-block;
+  transform-origin: 50% 88%;
+}
+.live-mascot--squish {
+  animation: squish 560ms cubic-bezier(0.3, 1.5, 0.5, 1);
+}
+.live-mascot--hop {
+  animation: hop 500ms cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+.mascot__eyes {
+  transition: transform 140ms ease-out;
+}
+.mascot__eye {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 70ms ease;
+}
+
+@keyframes float {
+  50% {
+    transform: translateY(-10px);
+  }
+}
+@keyframes squish {
+  0% {
+    transform: none;
+  }
+  30% {
+    transform: scale(1.18, 0.78);
+  }
+  60% {
+    transform: scale(0.92, 1.1) translateY(-6%);
+  }
+  100% {
+    transform: none;
+  }
+}
+@keyframes hop {
+  40% {
+    transform: translateY(-16%) scale(0.96, 1.05);
+  }
+  70% {
+    transform: translateY(0) scale(1.06, 0.94);
+  }
+}
+@keyframes wiggle {
+  25% {
+    transform: rotate(-9deg);
+  }
+  75% {
+    transform: rotate(9deg);
+  }
+}
+
+/* ---- mascot --------------------------------------------------------------- */
+
+.mascot {
+  overflow: visible;
+  flex: none;
+}
+.mascot__body,
+.mascot__puddle,
+.mascot__face {
+  transform-box: view-box;
+  transition: transform 1s linear, opacity 1s linear;
+}
+.mascot__body {
+  transform-origin: 100px 176px;
+}
+.mascot__puddle {
+  transform-origin: 100px 178px;
+}
+.mascot__face {
+  transform-origin: 95px 118px;
+}
+.mascot__drip {
+  transform-box: fill-box;
+  animation: drip 3.2s ease-in infinite;
+}
+.mascot__drip--late {
+  animation-delay: 1.6s;
+}
+@keyframes drip {
+  0%,
+  40% {
+    transform: translateY(0) scale(0.6);
+    opacity: 0;
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    transform: translateY(18px) scale(0.8);
+    opacity: 0;
+  }
+}
+.mascot--gone .mascot__puddle {
+  animation: evaporate 6s ease-out forwards;
+}
+@keyframes evaporate {
+  from {
+    opacity: 0.7;
+  }
+  to {
+    opacity: 0.08;
+  }
+}
+.mascot__wisp {
+  animation: rise 2.8s ease-in-out infinite;
+  opacity: 0;
+}
+.mascot__wisp--2 {
+  animation-delay: 0.9s;
+}
+.mascot__wisp--3 {
+  animation-delay: 1.8s;
+}
+@keyframes rise {
+  0% {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-22px);
+  }
+}

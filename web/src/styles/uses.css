@@ -1,0 +1,70 @@
+/* ---- the ice-blue flood ------------------------------------------------------------- */
+
+.l-uses {
+  background-color: var(--flood);
+  background-image: radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.35) 0 1px, transparent 1.6px),
+    radial-gradient(circle at 70% 70%, rgba(255, 255, 255, 0.25) 0 1px, transparent 1.6px);
+  background-size: 34px 38px, 51px 45px;
+  color: var(--on-flood);
+}
+.l-uses__inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: clamp(72px, 12vh, 140px) 16px;
+}
+.l-uses__quote {
+  margin: 0 0 48px;
+  font-size: clamp(3.4rem, 12vw, 10rem);
+  font-weight: 700;
+  letter-spacing: -0.06em;
+  line-height: 0.9;
+}
+.l-uses__grid {
+  display: grid;
+  gap: 36px;
+}
+.l-uses__grid p {
+  font-size: 1.15rem;
+  margin: 0 0 10px;
+  opacity: 0.85;
+}
+.l-uses__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 2px solid currentColor;
+}
+.l-uses__list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding: 18px 0;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+  font-size: clamp(1.15rem, 2.2vw, 1.6rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  opacity: 0;
+  transform: translateX(24px);
+  transition: opacity 600ms ease, transform 600ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  transition-delay: calc(var(--i) * 110ms);
+}
+.l-uses__list.is-in li {
+  opacity: 1;
+  transform: none;
+}
+.l-uses__list .mono {
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.l-uses__foot {
+  margin: 40px 0 0;
+  font-size: 0.9rem;
+}
+@media (min-width: 900px) {
+  .l-uses__grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 64px;
+  }
+}
