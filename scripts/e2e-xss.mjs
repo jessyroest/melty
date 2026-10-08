@@ -5,7 +5,7 @@
 // one literally, never run anything, never create markup from it, and keep
 // the layout intact at phone width.
 //
-// Runs against the dev server by default: WEB_URL=http://localhost:5173.
+// Runs against the production preview by default (WEB_URL=http://localhost:4173); set WEB_URL=http://localhost:5173 for the dev server.
 import { chromium } from "playwright-core";
 
 const WEB = process.env.WEB_URL ?? "http://localhost:4173";
