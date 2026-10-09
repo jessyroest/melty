@@ -15,10 +15,11 @@ import type { Sealed } from "../crypto/aead";
 export const RELAY_URL: string = import.meta.env.VITE_RELAY_URL ?? "ws://localhost:8787";
 
 export type RelayEvent =
-  | { type: "hello"; now: number; expiresAt: number; ttl: number; n: number; locked: boolean; tag: string; lobby: boolean }
+  | { type: "hello"; now: number; expiresAt: number; ttl: number; n: number; locked: boolean; deter: boolean; tag: string; lobby: boolean }
   /** a key-exchange frame from the socket tagged `from` */
   | { type: "kx"; from: string; d: string }
   | { type: "locked"; on: boolean }
+  | { type: "deter"; on: boolean }
   | { type: "melted" }
   | { type: "presence"; n: number }
   | { type: "msg"; sealed: Sealed }
@@ -107,7 +108,7 @@ export class RelayConnection {
   }
 
   /** creator-only control frames: they carry no message content */
-  control(frame: Extract<ClientFrame, { t: "melt" | "lock" }>): boolean {
+  control(frame: Extract<ClientFrame, { t: "melt" | "lock" | "deter" }>): boolean {
     if (!this.open) return false;
     this.ws.send(JSON.stringify(frame));
     return true;
@@ -135,6 +136,7 @@ export class RelayConnection {
           ttl: f.ttl,
           n: f.n,
           locked: !!f.locked,
+          deter: !!f.deter,
           tag: typeof f.tag === "string" ? f.tag : "",
           lobby: f.lobby === true,
         });
@@ -143,6 +145,8 @@ export class RelayConnection {
         return this.onEvent({ type: "kx", from: f.from, d: f.d });
       case "locked":
         return this.onEvent({ type: "locked", on: !!f.on });
+      case "deter":
+        return this.onEvent({ type: "deter", on: !!f.on });
       case "melted":
         return this.onEvent({ type: "melted" });
       case "presence":

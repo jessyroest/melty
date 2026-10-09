@@ -3,7 +3,7 @@ import { type CSSProperties, useEffect, useRef, useState } from "react";
 import type { Status, View } from "../state/session";
 import { LiveMascot } from "./LiveMascot";
 import { RoomCube } from "./RoomCube";
-import { DropIcon, InviteIcon, LeaveIcon, LockIcon, UnlockIcon } from "./RoomIcons";
+import { DropIcon, EyeOffIcon, InviteIcon, LeaveIcon, LockIcon, UnlockIcon } from "./RoomIcons";
 import { formatLeft, spokenLeft } from "./time";
 
 /** below this fraction of the lifetime the room gets a little nervous */
@@ -22,10 +22,11 @@ type Props = {
   onShare: () => void;
   onLeave: () => void;
   onLock: (on: boolean) => void;
+  onDeter: (on: boolean) => void;
   onMelt: () => void;
 };
 
-export function RoomBar({ view, leftMs, fraction, onShare, onLeave, onLock, onMelt }: Props) {
+export function RoomBar({ view, leftMs, fraction, onShare, onLeave, onLock, onDeter, onMelt }: Props) {
   const known = view.expiresAt !== null && view.ttlMs !== null;
   const urgent = known && fraction <= URGENT;
 
@@ -56,6 +57,12 @@ export function RoomBar({ view, leftMs, fraction, onShare, onLeave, onLock, onMe
             locked
           </span>
         )}
+        {view.deter && (
+          <span className="r-deter" title="messages blur until you touch them, and when you look away. it makes casual screenshots harder; it can't stop them.">
+            <EyeOffIcon />
+            screenshot deterrent
+          </span>
+        )}
       </div>
 
       {view.isCreator && (
@@ -72,6 +79,22 @@ export function RoomBar({ view, leftMs, fraction, onShare, onLeave, onLock, onMe
               {view.locked ? <LockIcon /> : <UnlockIcon />}
               <span className="r-lockbtn__text">{view.locked ? "locked" : "lock"}</span>
             </button>
+          <button
+            className={`btn btn--ghost btn--small r-deterbtn${view.deter ? " is-on" : ""}`}
+            type="button"
+            aria-pressed={view.deter}
+            aria-label={
+              view.deter
+                ? "turn screenshot deterrents off"
+                : "turn on screenshot deterrents for everyone: messages blur until touched, plus a watermark. best effort"
+            }
+            title={view.deter ? "screenshot deterrents: on" : "screenshot deterrents (best effort)"}
+            onClick={() => onDeter(!view.deter)}
+            disabled={view.status !== "live"}
+          >
+            <EyeOffIcon />
+            <span className="r-deterbtn__text">{view.deter ? "deterring" : "deter"}</span>
+          </button>
           <HoldToMelt onMelt={onMelt} disabled={view.status !== "live"} />
         </div>
       )}

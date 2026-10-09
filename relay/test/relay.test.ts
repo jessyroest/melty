@@ -269,6 +269,27 @@ describe("creator controls", () => {
     expect(await storageKeys(id)).toEqual(["expiresAt", "owner"]);
   });
 
+  it("screenshot deterrents: only the creator can switch them, everyone hears it, newcomers get it in hello, nothing is stored", async () => {
+    const { id, owner, a, b } = await roomWithTwo();
+    const other = await makeOwner();
+    b.send({ t: "deter", owner: other.secret, on: true });
+    expect(await b.next()).toEqual({ t: "error", code: "bad" });
+
+    a.send({ t: "deter", owner: owner.secret, on: true });
+    expect(await a.next()).toEqual({ t: "deter", on: true });
+    expect(await b.next()).toEqual({ t: "deter", on: true });
+
+    const c = await connect(id);
+    expect(await c.next()).toMatchObject({ t: "hello", deter: true });
+    expect(await storageKeys(id)).not.toContain("deter");
+
+    a.send({ t: "deter", owner: owner.secret, on: false });
+    await a.next(); // presence from c
+    expect(await a.next()).toEqual({ t: "deter", on: false });
+    const d = await connect(id);
+    expect(await d.next()).toMatchObject({ t: "hello", deter: false });
+  });
+
   it("a locked room refuses newcomers until it's unlocked; the creator can always get back in", async () => {
     const { id, owner, a, b } = await roomWithTwo();
     a.send({ t: "lock", owner: owner.secret, on: true });

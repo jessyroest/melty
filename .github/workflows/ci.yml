@@ -102,6 +102,11 @@ jobs:
         env:
           BROWSER_CHANNEL: chrome
 
+      - name: e2e screenshot deterrents
+        run: pnpm e2e:deter
+        env:
+          BROWSER_CHANNEL: chrome
+
       - name: Server output (on failure)
         if: failure()
         run: |

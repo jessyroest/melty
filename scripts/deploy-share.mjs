@@ -26,7 +26,8 @@ const relay = fileURLToPath(new URL("../relay/", import.meta.url));
 const configPath = fileURLToPath(new URL("../relay/wrangler.share.jsonc", import.meta.url));
 const ORIGIN_LINE = /("ALLOWED_ORIGINS":\s*")[^"]*(")/;
 const URL_RE = /https:\/\/melty\.[a-z0-9-]+\.workers\.dev/;
-const extraArgs = process.argv.slice(2);
+// pnpm passes a literal "--" through (`pnpm deploy:share -- --temporary`); wrangler would ignore what follows it
+const extraArgs = process.argv.slice(2).filter((a) => a !== "--");
 
 /** run a command, echo its output, resolve with stdout+stderr text */
 function run(cmd, args, opts) {

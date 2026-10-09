@@ -55,6 +55,8 @@ type Attachment = {
   ttl: number;
   owner?: string;
   locked: boolean;
+  /** screenshot deterrents on: room-wide, on the sockets only (never stored) */
+  deter?: boolean;
   lobby?: true;
   since: number;
 };
@@ -143,6 +145,7 @@ export class Room extends DurableObject<Env> {
       if (this.lobby().length >= MAX_LOBBY) return this.reject("full");
     }
     const ttl = creating ? Number(create) : (room?.ttl ?? inferTtl(expiresAt - now));
+    const deter = creating ? false : (room?.deter ?? false);
 
     const [client, server] = Object.values(new WebSocketPair());
     this.ctx.acceptWebSocket(server!);
@@ -154,16 +157,17 @@ export class Room extends DurableObject<Env> {
       ttl,
       owner,
       locked,
+      deter,
       since: now,
       ...(knocking ? { lobby: true as const } : {}),
     };
     server!.serializeAttachment(att);
 
     if (knocking) {
-      send(server!, { t: "hello", now, expiresAt, ttl, n: peers.length, locked, tag: att.id, lobby: true });
+      send(server!, { t: "hello", now, expiresAt, ttl, n: peers.length, locked, deter, tag: att.id, lobby: true });
     } else {
       const n = peers.length + 1;
-      send(server!, { t: "hello", now, expiresAt, ttl, n, locked, tag: att.id });
+      send(server!, { t: "hello", now, expiresAt, ttl, n, locked, deter, tag: att.id });
       for (const p of peers) send(p, { t: "presence", n });
     }
     return upgraded(client!);
@@ -279,7 +283,7 @@ export class Room extends DurableObject<Env> {
   }
 
   /** creator-only actions; the proof is checked against the hash the creator registered */
-  private async control(ws: WebSocket, att: Attachment, f: Extract<Frame, { t: "melt" | "lock" }>): Promise<void> {
+  private async control(ws: WebSocket, att: Attachment, f: Extract<Frame, { t: "melt" | "lock" | "deter" }>): Promise<void> {
     if (att.owner === undefined || (await sha256b64url(f.owner)) !== att.owner) {
       send(ws, { t: "error", code: "bad" });
       return;
@@ -287,6 +291,16 @@ export class Room extends DurableObject<Env> {
     if (f.t === "melt") {
       const { expiresAt } = await this.load();
       await this.expire(expiresAt ?? Date.now(), "melted");
+      return;
+    }
+    if (f.t === "deter") {
+      // a deterrent, not a lock: it lives on the sockets only and is never written to storage
+      for (const p of [...this.open(), ...this.lobby()]) {
+        const a = p.deserializeAttachment() as Attachment;
+        a.deter = f.on;
+        p.serializeAttachment(a);
+        if (!a.lobby) send(p, { t: "deter", on: f.on });
+      }
       return;
     }
     if (f.on) await this.ctx.storage.put("locked", true);
@@ -388,7 +402,8 @@ type Frame =
   | { t: "msg"; iv: string; ct: string }
   | { t: "kx"; to?: string; d: string }
   | { t: "melt"; owner: string }
-  | { t: "lock"; owner: string; on: boolean };
+  | { t: "lock"; owner: string; on: boolean }
+  | { t: "deter"; owner: string; on: boolean };
 
 function parseFrame(raw: string): Frame | "too_big" | null {
   let v: unknown;
@@ -399,7 +414,7 @@ function parseFrame(raw: string): Frame | "too_big" | null {
   }
   if (typeof v !== "object" || v === null) return null;
   const { t, iv, ct, owner, on, to, d } = v as Record<string, unknown>;
-  if (t === "melt" || t === "lock") {
+  if (t === "melt" || t === "lock" || t === "deter") {
     if (typeof owner !== "string" || !OWNER_RE.test(owner)) return null;
     if (t === "melt") return { t, owner };
     return typeof on === "boolean" ? { t, owner, on } : null;

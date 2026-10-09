@@ -13,13 +13,16 @@ type Props = {
   fraction: number;
   onInvite: () => void;
   actions: BubbleActions;
+  /** screenshot deterrents on: your own nickname, faintly, across the log */
+  watermark: string | null;
 };
 
 /** The message pool: a scrolling log floating on slowly rising meltwater. */
-export function RoomMessages({ lines, isCreator, water, fraction, onInvite, actions }: Props) {
+export function RoomMessages({ lines, isCreator, water, fraction, onInvite, actions, watermark }: Props) {
   return (
     <div className="r-pool panel" style={{ "--water": water.toFixed(4) } as CSSProperties}>
       <Water />
+      {watermark && <Watermark nick={watermark} />}
       <MessageList
         lines={lines}
         isCreator={isCreator}
@@ -234,6 +237,8 @@ function SystemLine({ line }: { line: Line }) {
   const t = line.text;
   const kind = !line.nick && t.startsWith("the room is")
     ? "lock"
+    : !line.nick && t.startsWith("screenshot deterrents")
+      ? "deter"
     : t === `${line.nick} joined`
       ? "join"
       : t === `${line.nick} left`
@@ -242,7 +247,7 @@ function SystemLine({ line }: { line: Line }) {
   return (
     <p className={`r-sys r-sys--${kind}`}>
       <span className="r-sys__glyph" aria-hidden="true">
-        {kind === "join" ? "+" : kind === "leave" ? "−" : kind === "lock" ? "🔒" : "✎"}
+        {kind === "join" ? "+" : kind === "leave" ? "−" : kind === "lock" ? "🔒" : kind === "deter" ? "◌" : "✎"}
       </span>
       <span className="r-sys__text">{sysText(line)}</span>
     </p>
@@ -278,6 +283,17 @@ function Empty({ isCreator, fraction, onInvite }: { isCreator: boolean; fraction
         <li>never stored on the server</li>
         <li>max 8 people</li>
       </ul>
+    </div>
+  );
+}
+
+/** a leaked screenshot shows whose screen it came from; decorative, so hidden from screen readers */
+function Watermark({ nick }: { nick: string }) {
+  return (
+    <div className="r-watermark" aria-hidden="true">
+      {Array.from({ length: 48 }, (_, i) => (
+        <bdi key={i}>{nick}</bdi>
+      ))}
     </div>
   );
 }

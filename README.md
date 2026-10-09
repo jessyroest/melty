@@ -16,6 +16,7 @@ Messages are **end-to-end encrypted** (AES-256-GCM). The link doesn't carry the 
 - **Installable (PWA).** The service worker caches the app itself, never messages.
 - **Burn after reading.** A message arrives frozen; once someone opens it, it melts away 10 seconds later. The sender's own copy goes 10 seconds after sending.
 - **Typing indicator**, sent encrypted, at most once every 3 seconds.
+- **Screenshot deterrents** (creator's choice, best effort): messages blur until touched, the room blurs when you look away, and a faint watermark shows your own nickname. They can't stop a screenshot, only make it awkward.
 - **Reactions** 🧊 💧 🔥 👍, sent encrypted.
 - **Creator controls:**
   - **lock the room**, so nobody new can join, not even with the link

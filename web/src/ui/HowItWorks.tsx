@@ -108,7 +108,7 @@ const PROTECTS: ReactNode[] = [
 
 const DOESNT: ReactNode[] = [
   <>
-    <strong>screenshots,</strong> or photos of the screen.
+    <strong>screenshots,</strong> or photos of the screen. the optional screenshot deterrents (blur until touched, a watermark) only make it awkward, not impossible.
   </>,
   <>
     <strong>compromised devices</strong> or malicious browser extensions. they see what you see.

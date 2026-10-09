@@ -23,15 +23,20 @@ const touchOnly = () => matchMedia("(hover: none)").matches;
  */
 export function Bubble({ line, nick, mine, actions }: { line: Line; nick: string; mine: boolean; actions: BubbleActions }) {
   const [picking, setPicking] = useState(false);
+  // screenshot deterrents: on touch screens a message is readable while you hold it
+  const [held, setHeld] = useState(false);
+  const pressedAt = useRef(0);
   const picker = useRef<HTMLSpanElement>(null);
   const frozen = line.burn && !line.revealed;
   const canReact = !!line.msgId && !line.melting && !frozen;
-  const cls = `r-bubble${line.burn ? " r-bubble--burn" : ""}${frozen ? " r-bubble--frozen" : ""}${line.melting ? " is-melting" : ""}${canReact ? " can-react" : ""}${line.undelivered ? " r-bubble--undelivered" : ""}`;
+  const cls = `r-bubble${line.burn ? " r-bubble--burn" : ""}${frozen ? " r-bubble--frozen" : ""}${line.melting ? " is-melting" : ""}${canReact ? " can-react" : ""}${line.undelivered ? " r-bubble--undelivered" : ""}${held ? " is-held" : ""}`;
 
   // phones can't hover to find the react button: a tap anywhere on the bubble opens the picker.
   // (a long press still selects text, since that isn't a click)
   const onTap = (e: MouseEvent<HTMLParagraphElement>) => {
     if (!canReact || !touchOnly()) return;
+    // a long press was for reading, not for reacting
+    if (performance.now() - pressedAt.current > 350) return;
     if ((e.target as Element).closest("button")) return;
     if (getSelection()?.toString()) return;
     setPicking((p) => !p);
@@ -53,7 +58,17 @@ export function Bubble({ line, nick, mine, actions }: { line: Line; nick: string
     <>
       {/* phones: a tap on the bubble opens the reaction picker. keyboards and screen readers use the react button */}
       {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */}
-      <p className={cls} onClick={onTap}>
+      <p
+        className={cls}
+        onClick={onTap}
+        onPointerDown={(e) => {
+          pressedAt.current = performance.now();
+          if (e.pointerType !== "mouse") setHeld(true);
+        }}
+        onPointerUp={() => setHeld(false)}
+        onPointerCancel={() => setHeld(false)}
+        onPointerLeave={() => setHeld(false)}
+      >
         {frozen ? (
           <button className="r-bubble__thaw" type="button" onClick={() => actions.reveal(line.id)}>
             <FlameIcon />

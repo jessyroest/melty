@@ -2363,3 +2363,90 @@
   outline-offset: -2px;
   border-radius: var(--radius-sm);
 }
+
+/* ---- screenshot deterrents (best effort: they can't stop a screenshot, only make it awkward) ---- */
+
+/* messages stay blurred until you hover, focus or (on touch) hold them */
+.room--deter .r-text {
+  filter: blur(6px);
+  transition: filter 120ms ease;
+}
+.room--deter .r-bubble:hover .r-text,
+.room--deter .r-bubble:focus-within .r-text {
+  filter: none;
+}
+/* touch screens keep :hover after a tap; there only holding counts */
+@media (hover: none) {
+  .room--deter .r-bubble:hover .r-text {
+    filter: blur(6px);
+  }
+}
+.room--deter .r-bubble.is-held .r-text {
+  filter: none;
+}
+.room--deter .r-bubble {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* looking away (app switcher, a snipping tool taking focus, another window): blur the room */
+.room--deter.is-away .messages,
+.room--deter.is-away .composer {
+  filter: blur(14px);
+}
+/* burn-after-read messages always blur when you look away */
+.room.is-away .r-bubble--burn .r-text {
+  filter: blur(8px);
+}
+
+/* your own nickname, faintly, across the log: a leaked screenshot shows whose screen it was */
+.r-watermark {
+  position: absolute;
+  inset: -40%;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 64px 80px;
+  padding: 32px;
+  transform: rotate(-22deg);
+  pointer-events: none;
+  user-select: none;
+  opacity: 0.075;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.r-deter {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 10px 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.r-deter .r-ico {
+  width: 14px;
+  height: 14px;
+}
+.r-deterbtn.is-on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+@media (max-width: 560px) {
+  .r-deterbtn__text {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .room--deter .r-text {
+    transition: none;
+  }
+}

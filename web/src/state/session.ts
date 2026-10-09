@@ -86,6 +86,8 @@ export type View = {
   typing: string[];
   /** the creator has closed the door: nobody new can join */
   locked: boolean;
+  /** screenshot deterrents (the creator's choice, for everyone): blur until touched, blur when away, watermark */
+  deter: boolean;
   entry: Entry;
   /** the room's 4 words, once this tab knows them */
   words: string[] | null;
@@ -274,6 +276,7 @@ export class Session {
       hint: null,
       typing: [],
       locked: false,
+      deter: false,
       entry: init.entry,
       words: this.code ? codeWords(this.code) : null,
       knocks: [],
@@ -421,6 +424,13 @@ export class Session {
   }
 
   /** creator only: close or open the door for newcomers */
+  /** creator only: screenshot deterrents for everyone in the room (a deterrent, not a guarantee) */
+  deter(on: boolean): void {
+    if (!this.owner || !this.conn?.control({ t: "deter", owner: toB64url(this.owner.secret), on })) {
+      this.flash("not connected right now.");
+    }
+  }
+
   lock(on: boolean): void {
     if (!this.owner || !this.conn?.control({ t: "lock", owner: toB64url(this.owner.secret), on })) {
       this.flash("not connected right now.");
@@ -613,6 +623,7 @@ export class Session {
           ttlMs: e.ttl * 1000,
           offset: Math.round(e.now - Date.now()),
           locked: e.locked,
+          deter: e.deter,
         });
         this.scheduleExpiry();
         this.startTick();
@@ -632,6 +643,19 @@ export class Session {
         return this.onKx(e.from, e.d);
       case "presence":
         return this.update({ n: e.n });
+      case "deter":
+        if (e.on === this.view.deter) return;
+        this.update({ deter: e.on });
+        this.push({
+          kind: "system",
+          mine: false,
+          nick: "",
+          text: e.on
+            ? "screenshot deterrents on: messages blur until you touch them."
+            : "screenshot deterrents off.",
+          ts: Date.now(),
+        });
+        return;
       case "locked":
         if (e.on === this.view.locked) return;
         this.update({ locked: e.on });

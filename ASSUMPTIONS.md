@@ -223,3 +223,21 @@ The owner approved these deviations from SPEC.md:
 - **Words mapping.** The 4-words → room id mapping is stored by the `Door` object until the room expires.
 
 `SPEC.md`'s "only the expiry time in DO storage" rule should be read with these exceptions.
+
+## Screenshot deterrents (2026-10-09)
+
+The owner asked for screenshot protection. A website can't block or reliably detect screenshots: the operating system takes them. So melty offers **deterrents**, never called "protection". The creator switches them on per room.
+
+**What they do:**
+1. Messages stay blurred until you hover or focus them, or hold them on a touch screen. A long press is for reading and doesn't open the reaction picker.
+2. The whole log and the composer blur when the window or tab loses focus: app switcher, a snipping tool taking focus, another window.
+3. Your own nickname is drawn faintly across the log, so a leaked screenshot shows whose screen it came from.
+
+**Also:** burn-after-read text always blurs when you look away, whether or not the deterrents are on.
+
+**How it's built:**
+- The setting is a creator-only control frame (`deter`), checked with the owner proof just like `lock`. Everyone is told about it, and newcomers get it in their hello.
+- Unlike `lock`, it lives **only on the sockets, never in storage**. If the room ever empties, it's off again.
+- The blur is visual only. The text stays in the DOM, so screen readers read it as usual.
+
+**Not done:** detecting the PrintScreen key, because it's too unreliable to promise anything.

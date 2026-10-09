@@ -131,13 +131,16 @@ export type ClientFrame =
   /** creator only: wipe the room for everyone right now */
   | { t: "melt"; owner: string }
   /** creator only: refuse (or allow again) new people */
-  | { t: "lock"; owner: string; on: boolean };
+  | { t: "lock"; owner: string; on: boolean }
+  /** creator only: screenshot deterrents (blur until touched, blur when away, a watermark) for everyone */
+  | { t: "deter"; owner: string; on: boolean };
 
 export type ServerFrame =
   /** `tag` is this socket's address for key-exchange frames; `lobby` = knocking, not a member yet */
-  | { t: "hello"; now: number; expiresAt: number; ttl: number; n: number; locked: boolean; tag: string; lobby?: true }
+  | { t: "hello"; now: number; expiresAt: number; ttl: number; n: number; locked: boolean; deter?: boolean; tag: string; lobby?: true }
   | { t: "kx"; from: string; d: string }
   | { t: "locked"; on: boolean }
+  | { t: "deter"; on: boolean }
   | { t: "melted" }
   | { t: "presence"; n: number }
   | { t: "msg"; iv: string; ct: string }

@@ -36,6 +36,7 @@ type SessionApi = NonNullable<ReturnType<typeof useStore>["session"]>;
 
 function Room({ view, session }: { view: View; session: SessionApi }) {
   const [sharing, setSharing] = useState(false);
+  const [away, setAway] = useState(false);
   const now = useNow(1000);
   const { leftMs, fraction } = timeLeft(view, now);
   const known = view.expiresAt !== null;
@@ -75,6 +76,19 @@ function Room({ view, session }: { view: View; session: SessionApi }) {
     };
   }, []);
 
+  // the tab or window lost focus (app switcher, a snipping tool, another window): blur the chat
+  useEffect(() => {
+    const check = () => setAway(document.visibilityState === "hidden" || !document.hasFocus());
+    addEventListener("blur", check);
+    addEventListener("focus", check);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      removeEventListener("blur", check);
+      removeEventListener("focus", check);
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, []);
+
   // the creator gets the invite sheet once, right away
   const shownOnce = useRef(false);
   useEffect(() => {
@@ -107,7 +121,7 @@ function Room({ view, session }: { view: View; session: SessionApi }) {
 
   return (
     <div
-      className={`room${urgent ? " room--urgent" : ""}${view.status === "live" ? "" : " room--offline"}${door ? " room--door" : ""}`}
+      className={`room${urgent ? " room--urgent" : ""}${view.status === "live" ? "" : " room--offline"}${door ? " room--door" : ""}${view.deter ? " room--deter" : ""}${away ? " is-away" : ""}`}
     >
       <RoomBar
         view={view}
@@ -116,6 +130,7 @@ function Room({ view, session }: { view: View; session: SessionApi }) {
         onShare={openShare}
         onLeave={() => void session.leave("you left. nothing was kept.")}
         onLock={(on) => session.lock(on)}
+        onDeter={(on) => session.deter(on)}
         onMelt={() => session.meltNow()}
       />
       {/* the room has no visible title; screen readers still get one to land on */}
@@ -128,6 +143,7 @@ function Room({ view, session }: { view: View; session: SessionApi }) {
         fraction={fraction}
         onInvite={openShare}
         actions={actions}
+        watermark={view.deter ? view.nick : null}
       />
       <RoomComposer view={view} session={session} />
       {link && <ShareSheet link={link} words={view.words} onClose={() => setSharing(false)} />}
