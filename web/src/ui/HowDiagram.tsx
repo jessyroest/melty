@@ -51,7 +51,7 @@ function Key({ x, y }: { x: number; y: number }) {
   );
 }
 
-/** your browser: secret → link → HKDF → room id + key. 320 × 290 */
+/** your browser: link secret → link → HKDF → room id + psk. 320 × 290 */
 function You({ x, y, secret }: { x: number; y: number; secret: string }) {
   return (
     <g transform={`translate(${x} ${y})`}>
@@ -63,7 +63,7 @@ function You({ x, y, secret }: { x: number; y: number; secret: string }) {
 
       <rect className="hd-chip" x="20" y="42" width="280" height="34" rx="10" />
       <text className="hd-t" x="34" y="64">
-        <tspan className="hd-acc">secret</tspan>
+        <tspan className="hd-acc">link secret</tspan>
         <tspan className="hd-mut"> · 32 random bytes</tspan>
       </text>
       <path className="hd-arrow" d="M160 77 V93" />
@@ -96,13 +96,13 @@ function You({ x, y, secret }: { x: number; y: number; secret: string }) {
       <rect className="hd-out hd-out--key" x="165" y="208" width="135" height="62" rx="12" />
       <Lock x={276} y={217} />
       <text className="hd-t hd-t--b" x="179" y="230">
-        AES-256-GCM
+        link psk
       </text>
       <text className="hd-s" x="179" y="246">
-        room-key-v1
+        link-psk-v1
       </text>
       <text className="hd-s hd-acc" x="179" y="261">
-        key stays here
+        stays here
       </text>
     </g>
   );
@@ -148,7 +148,7 @@ function Peer({ x, y, w, h, says }: { x: number; y: number; w: number; h: number
       </text>
       <Key x={16} y={narrow ? 38 : 42} />
       <text className="hd-s" x="40" y={narrow ? 48 : 52}>
-        key via the link
+        key via PQ exchange
       </text>
       <rect className="hd-bubble" x="14" y={h - 38} width={narrow ? w - 28 : 130} height="26" rx="13" />
       <text className="hd-t" x="26" y={h - 20}>

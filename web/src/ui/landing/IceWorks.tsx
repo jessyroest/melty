@@ -71,9 +71,9 @@ export function IceWorks() {
         </div>
       </div>
       <div className="l-works__grid">
-        <WorkCard n={1} tag="the key" title="the link is the key" wide illo={(live) => <LinkDiagram live={live} />}>
-          your browser makes a random 32-byte secret and puts it after the # in the link. browsers never send that
-          part to a server.
+        <WorkCard n={1} tag="the key" title="the link opens the door" wide illo={(live) => <LinkDiagram live={live} />}>
+          the part after the # never reaches a server, and it isn't the key: someone inside hands that over through a
+          post-quantum key exchange (X25519 + ML-KEM-768). a link found after the room melted opens nothing.
         </WorkCard>
         <WorkCard n={2} tag="the relay" title="the relay sees noise" illo={(live) => <RelayDiagram live={live} />}>
           messages are sealed with AES-256-GCM on your device. the relay passes sealed envelopes along and can't open

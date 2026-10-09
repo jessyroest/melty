@@ -6,7 +6,7 @@ import { useInView } from "./hooks";
 
 const LIMITS = [
   { title: "stop screenshots.", body: "anyone in the room can still capture the screen." },
-  { title: "check who has the link.", body: "whoever holds it can read along. share it carefully." },
+  { title: "check who has the link.", body: "whoever holds it gets in while the room is open. share it carefully." },
   { title: "save a compromised device.", body: "malware or a shady browser extension sees what you see." },
   {
     title: "hide that you were there.",

@@ -15,7 +15,7 @@ All images were generated with **GPT Image 2.5** (`gpt_image_2_5`) and downloade
 | | **total** | | **3.0** | |
 
 - **Transparent background.** "Transparent background" was requested for the mascot but not honoured; the outputs have a dark background. That made no difference, because the mascot was redrawn as SVG by hand (`web/src/ui/Mascot.tsx`) and the PNGs are only references.
-- **Processing.** Conversion and cropping were done locally with ffmpeg.
+- **Processing.** Conversion and cropping were done locally with ffmpeg. Since the finishing round, `web/public/brand/og.jpg` is rendered by `scripts/brand-images.mjs` from `og-raw.png` plus the cube and wordmark (no new generations, no credits used).
 
 ## Prompts
 

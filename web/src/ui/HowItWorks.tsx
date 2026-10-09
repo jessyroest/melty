@@ -10,7 +10,7 @@ import { Mascot } from "./Mascot";
 const TOC: TocItem[] = [
   { id: "how-steps", label: "what happens" },
   { id: "how-threats", label: "threat model" },
-  { id: "how-link", label: "the link is the key" },
+  { id: "how-link", label: "links and words" },
   { id: "how-dont", label: "what we don't do" },
   { id: "how-tech", label: "the technical bits" },
 ];
@@ -21,29 +21,42 @@ const STEPS: { tag: string; title: string; body: ReactNode }[] = [
     title: "you open a room",
     body: (
       <>
-        your browser makes a random 32-byte secret and puts it in the link, after the <code>#</code>:{" "}
-        <code>/r#&lt;secret&gt;</code>. browsers don't send that part to servers, and your own address bar never shows
-        it.
+        your browser makes two random 32-byte values: the <strong>room key</strong> (AES-256-GCM, non-extractable,
+        never in the link) and a <strong>link secret</strong>, which goes after the <code>#</code>:{" "}
+        <code>/r#&lt;secret&gt;</code>. it also picks <strong>4 words</strong> for the room. browsers don't send the{" "}
+        <code>#</code> part to servers.
       </>
     ),
   },
   {
     tag: "HKDF-SHA256",
-    title: "one secret, two values",
+    title: "the link points, it doesn't unlock",
     body: (
       <>
-        from the secret your browser derives a <strong>room id</strong>, which is sent to the relay, and an{" "}
-        <strong>AES-256-GCM key</strong>, which is non-extractable and never leaves your browser.
+        from the link secret your browser derives a <strong>room id</strong>, which is sent to the relay, and a{" "}
+        <strong>pre-shared key</strong> that proves you were given the link. the link no longer holds the room key.
       </>
     ),
   },
   {
-    tag: "link or QR code",
-    title: "you share the link",
+    tag: "X25519 + ML-KEM-768",
+    title: "someone inside hands over the key",
     body: (
       <>
-        whoever opens it derives the same room id and the same key. the app reads the <code>#</code> part once and
-        removes it from the address bar straight away.
+        a newcomer and someone already inside run a hybrid key exchange: classic X25519 plus post-quantum ML-KEM-768,
+        with fresh keys every time. the room key travels sealed with the result. with the link, the pre-shared key is
+        mixed in, so the relay can't sit in the middle.
+      </>
+    ),
+  },
+  {
+    tag: "4 words + 6 safety words",
+    title: "or someone says the words",
+    body: (
+      <>
+        the 4 words only find the room. a knock waits in a lobby that sees no messages until a person inside lets them
+        in. then both see 6 safety words, made from the key exchange. say them out loud: same words, nobody in the
+        middle.
       </>
     ),
   },
@@ -52,18 +65,9 @@ const STEPS: { tag: string; title: string; body: ReactNode }[] = [
     title: "every message is sealed",
     body: (
       <>
-        chat messages and join / leave / nickname notices are encrypted with a fresh random 12-byte IV, with the room id
-        as additional data. the relay receives <code>{"{iv, ct}"}</code> and nothing else.
-      </>
-    ),
-  },
-  {
-    tag: "one Durable Object per room",
-    title: "the relay passes it on",
-    body: (
-      <>
-        it forwards ciphertext to the other people in the room and stores only the expiry time. it also enforces the
-        limits: 8 people, 4 KB per message, 5 messages per second per connection.
+        chat messages and join / leave / nickname notices are padded to one of three fixed sizes and encrypted with a
+        fresh random IV. the room id, your random sender id and a counter go in the additional data, so a replayed
+        message is refused. the relay receives <code>{"{iv, ct}"}</code> and nothing else.
       </>
     ),
   },
@@ -72,9 +76,9 @@ const STEPS: { tag: string; title: string; body: ReactNode }[] = [
     title: "it melts",
     body: (
       <>
-        an alarm fires: the relay tells everyone, closes every connection and deletes the room. for 24 hours it refuses
-        that room id, then that note is deleted too. your browser zeroes the secret and drops the key and the messages,
-        which only ever lived in memory. leaving or closing the tab does the same.
+        the relay forwards ciphertext and stores only the expiry time (and, for the words, which room they point to).
+        an alarm fires: it tells everyone, closes every connection and deletes the room and its words. your browser
+        zeroes the secrets and drops the key and the messages, which only ever lived in memory.
       </>
     ),
   },
@@ -89,8 +93,16 @@ const PROTECTS: ReactNode[] = [
     drop them when the room ends.
   </>,
   <>
-    <strong>recorded traffic being read later,</strong> as long as the link stays secret.{" "}
-    <a href="#how-link">read the catch</a>.
+    <strong>recorded traffic being read later,</strong> including by a future quantum computer: the key travels
+    through a hybrid post-quantum exchange, and a link found after the room melted opens nothing.{" "}
+    <a href="#how-link">read the details</a>.
+  </>,
+  <>
+    <strong>a relay in the middle of a link join,</strong> and of a words join once you've compared the safety
+    words.
+  </>,
+  <>
+    <strong>replayed messages.</strong> a counter per sender means the relay can't play a message to you twice.
   </>,
 ];
 
@@ -102,36 +114,40 @@ const DOESNT: ReactNode[] = [
     <strong>compromised devices</strong> or malicious browser extensions. they see what you see.
   </>,
   <>
-    <strong>someone forwarding the link.</strong> whoever has it can read along and post under any nickname. nicknames
-    are not verified.
+    <strong>someone forwarding the link.</strong> while someone is inside, whoever has it gets the key and can post
+    under any nickname. nicknames are not verified.
   </>,
   <>
-    <strong>where the link travels:</strong> the messenger you shared it in, your clipboard, browser history. the app
-    strips it from the address bar right after opening, but opening a room link leaves it, key included, in your
-    browser history (measured in Edge and Chrome). pasting it into "join a room" avoids that.
+    <strong>where the link travels:</strong> the messenger you shared it in, your clipboard, browser history. opening a
+    room link leaves it in your browser history (measured in Edge and Chrome). it no longer holds the key, but it gets
+    you in while the room is open. pasting it into "join a room" avoids the history.
+  </>,
+  <>
+    <strong>skipping the safety words.</strong> the relay knows the 4 words. if a knock is let in and nobody compares
+    the 6 words, the relay could have been the one knocking, or sat in the middle.
   </>,
   <>
     <strong>metadata.</strong> the relay and Cloudflare see IP addresses, connection times, how many people are in a
-    room, the room id (not secret, it doesn't reveal the key), and message sizes and timing. the relay writes no logs,
-    but the data passes through Cloudflare.
+    room, the room id (not secret, it doesn't reveal the key), and message timing. sizes only in three steps. the relay
+    writes no logs, but the data passes through Cloudflare.
   </>,
   <>
-    <strong>a malicious relay</strong> dropping, delaying, reordering or replaying messages within a room. there is no
-    replay protection or padding yet. it still can't read or forge them.
+    <strong>a malicious relay</strong> dropping, delaying or reordering messages, or replaying old ones to someone who
+    joined after they were sent. it still can't read or forge them.
   </>,
   <>
     <strong>burn after reading being final.</strong> it removes a message from screens running this app, 10 seconds
     after it's opened. it can't stop a screenshot, a modified app, or someone copying it in those 10 seconds.
   </>,
   <>
-    <strong>perfect memory wiping.</strong> in JavaScript it's best effort: the secret's bytes are zeroed, but the
+    <strong>perfect memory wiping.</strong> in JavaScript it's best effort: the secrets' bytes are zeroed, but the
     garbage collector decides when the rest is really gone.
   </>,
 ];
 
 const DONT: { title: string; body: string }[] = [
   { title: "no accounts", body: "no sign-up, no email, no phone number. open a room and talk." },
-  { title: "no tracking", body: "no analytics, no cookies, no web storage." },
+  { title: "no tracking", body: "no analytics, no cookies, no web storage. the offline cache holds the app, never messages." },
   { title: "no third parties", body: "no third-party scripts or fonts. we host our own." },
   { title: "no file uploads", body: "just text, up to 4 KB per message." },
   { title: "no relay logs", body: "the relay writes no logs. the data still passes through Cloudflare." },
@@ -139,22 +155,26 @@ const DONT: { title: string; body: string }[] = [
 ];
 
 const SPEC: [string, ReactNode][] = [
-  ["secret", "32 random bytes · crypto.getRandomValues · in the link after #"],
+  ["room key", "32 random bytes · AES-256-GCM · non-extractable · never in the link"],
+  ["link secret", "32 random bytes · in the link after #"],
   ["kdf", "HKDF-SHA256 · salt: 32 zero bytes"],
-  ["room id", <>info <q>room-id-v1</q> · 32 bytes · base64url · sent to the relay in a WebSocket header, not the URL</>],
-  ["key", <>info <q>room-key-v1</q> · AES-256-GCM · non-extractable</>],
-  ["iv", "12 random bytes, fresh for every message"],
-  ["aad", "roomId"],
+  ["room id", <>info <q>room-id-v1</q> · 32 bytes · sent to the relay in a WebSocket header, not the URL</>],
+  ["link psk", <>info <q>link-psk-v1</q> · authenticates a link join · never leaves the browser</>],
+  ["key exchange", <>X25519 + ML-KEM-768, fresh per join · shared = HKDF(x25519 ‖ mlkem, <q>pq-hybrid-v1</q>)</>],
+  ["4 words", "EFF short wordlist · 1296⁴ ≈ 2⁴¹ · they find the room, they're not a key · 10 tries per IP per minute"],
+  ["safety words", "6 words from SHA-256 of the key exchange transcript"],
+  ["message", "padded to 256 / 1024 / 4352 bytes · random 12-byte IV"],
+  ["aad", "roomId · sender id (8 random bytes) · counter (replay protection)"],
   ["on the wire", "{iv, ct}"],
-  ["relay stores", "expiresAt"],
+  ["relay stores", "expiresAt · for the words: the room id they point to, until expiry"],
   [
     "limits",
-    "8 people · 4 KB plaintext · 5 msg/s per connection, 20 per room · 20 new rooms per IP per hour · 60 connection attempts per IP per minute",
+    "8 people · 4 KB plaintext · 5 msg/s per connection, 20 per room · 20 new rooms per IP per hour · 60 connection attempts per IP per minute · 4 knocks waiting per room",
   ],
   ["encrypted extras", "typing notices · reactions · burn-after-read flag, all inside the ciphertext"],
   ["creator proof", "32 random bytes kept in memory · relay only holds its SHA-256, on open sockets, never in storage"],
-  ["creator can", "lock the room (no newcomers) · melt it now (wiped for everyone)"],
-  ["not yet", "key exchange · forward secrecy · replay protection · padding"],
+  ["creator can", "lock the room (no newcomers, knocks sent away) · melt it now (wiped for everyone)"],
+  ["not yet", "re-keying when someone leaves · post-quantum signatures · hiding message timing"],
   ["audit", "not independently audited (yet)"],
 ];
 
@@ -199,11 +219,11 @@ export function HowItWorks() {
       <header className="how-hero">
         <Frost density={0.5} />
         <div className="how-hero__text">
-          <p className="how-eyebrow mono">how it works · phase 1</p>
+          <p className="how-eyebrow mono">how it works · phase 2</p>
           <h1 className="how-h1">
-            the link
+            the link opens
             <br />
-            is the key.
+            the door.
           </h1>
           <p className="how-hero__lead">
             your browser seals every message before it leaves. the relay passes sealed envelopes along and keeps only
@@ -224,11 +244,12 @@ export function HowItWorks() {
             <li className="how-legend__share">travels however you share it</li>
           </ul>
           <p className="sr-only">
-            diagram: your browser creates a 32-byte secret and puts it in the link after the hash, as /r#secret. HKDF
-            derives two values from it: a room id, which is sent to the relay, and an AES-256-GCM key, which stays in
-            your browser. you share the link yourself; the secret part never reaches the relay. messages leave your
-            browser as ciphertext, go through the relay, which stores only the expiry time, and reach the other
-            browsers, which hold the same key from the link. at expiry the room is deleted and every browser drops the
+            diagram: your browser creates a 32-byte link secret and puts it in the link after the hash, as
+            /r#secret. HKDF derives two values from it: a room id, which is sent to the relay, and a pre-shared key,
+            which stays in your browser. the room key is separate and never in the link. you share the link yourself;
+            the secret part never reaches the relay. the other browsers get the room key from someone inside, through
+            a post-quantum key exchange. messages leave your browser as ciphertext, go through the relay, which stores
+            only the expiry time, and reach the others. at expiry the room is deleted and every browser drops the
             key.
           </p>
         </figcaption>
@@ -299,14 +320,20 @@ export function HowItWorks() {
               <span aria-hidden="true">03 / </span>the catch
             </p>
             <h2 className="how-h2" id="how-link-h">
-              the link is the key.
+              someone inside holds the key.
             </h2>
             <p>
-              phase 1 has no key exchange, so there is no forward secrecy. anyone who later gets the link{" "}
-              <em>and</em> also has recorded traffic can decrypt it. treat the link like the conversation itself.
+              a link still gets anyone in, automatically, as long as someone is inside to hand over the key. so treat it
+              like the conversation while the room is open. once the room has melted, a link found in a history or a
+              chat log opens nothing, and recorded traffic can't be decrypted with it.
+            </p>
+            <p>
+              the 4 words are easier to say, and weaker: the relay knows them. that's why a person has to let a knock in,
+              and why you compare the 6 safety words. if they differ, leave: someone may be in the middle.
             </p>
             <p className="how-link__note">
-              a key exchange, so links don't have to carry the key, is planned for phase 2. it isn't built yet.
+              the room key is the same for the whole room, so someone who gets in while it's open can read what was sent
+              before, if they also recorded the traffic. there is no re-keying when someone leaves.
             </p>
             <Mascot left={0.6} size={150} className="how-link__mascot" />
           </section>

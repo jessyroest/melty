@@ -7,7 +7,7 @@
 <!-- Commands you ran and what you checked by hand. Delete what doesn't apply. -->
 
 - [ ] `pnpm check` (lint + typecheck + test + build + check:bundle + check:logs), with 0 lint errors and no new lint warnings
-- [ ] `pnpm e2e` and `pnpm e2e:features` against the relay + `web preview`
+- [ ] `pnpm e2e`, `e2e:features`, `e2e:xss`, `e2e:resilience` and `e2e:phase2` against the relay + `web preview`
 - [ ] Manually in the production-like setup (`pnpm build`, relay dev, `web preview` on :4173)
 - Browser(s) used:
 
@@ -15,7 +15,7 @@
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md#hard-rules). Tick each one, or explain below why it doesn't apply.
 
-- [ ] **Claims:** nothing in the UI, README or metadata claims more than the code does. No "post-quantum", "zk", "military grade", "100% anonymous", "unhackable" or "anonymous".
+- [ ] **Claims:** nothing in the UI, README or metadata claims more than the code does. "post-quantum" only for the key exchange; no "zk", "military grade", "100% anonymous", "unhackable" or "anonymous".
 - [ ] **No logs:** no `console.*` in the relay; nothing logs messages, IPs, roomIds, secrets, keys or fragments.
 - [ ] **No storage of keys:** keys, secrets and messages stay in memory only (no localStorage, sessionStorage, IndexedDB, cookies or URL query). The server stores no message content.
 - [ ] **CSP-safe:** no inline scripts or styles, no `dangerouslySetInnerHTML` / `innerHTML`, no `data:` URIs, no third-party scripts, fonts, images or analytics.

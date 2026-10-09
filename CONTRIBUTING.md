@@ -71,6 +71,9 @@ pnpm --filter @melty/web preview    # terminal 2, http://localhost:4173
 | `pnpm check` | no | `lint` + `typecheck` + `test` + `build` + `check:bundle` + `check:logs` in one go. Run this before every PR. |
 | `pnpm e2e` | **yes**: relay on :8787 and `web preview` on :4173 | two real browser sessions chat through the relay; also checks the fragment leaves the address bar, no storage or cookies are used, no request leaves our origin + relay, no CSP violations |
 | `pnpm e2e:features` | **yes**: same as `pnpm e2e` | three browsers check typing, reactions, burn after reading, lock / unlock and melt now, plus no CSP violations |
+| `pnpm e2e:xss` | **yes**: same as `pnpm e2e` | hostile messages and nicknames stay text; bidi isolation |
+| `pnpm e2e:resilience` | **yes**: same as `pnpm e2e` | offline and back, error screens, unreachable relay |
+| `pnpm e2e:phase2` | **yes**: same as `pnpm e2e` | 4 words and a knock, matching safety words, link joins answered by any member, only padded sizes and no plaintext on the wire |
 
 For the e2e tests, start the production-like setup above first (build, relay, preview), then run them from a third terminal.
 
@@ -87,7 +90,7 @@ BROWSER_CHANNEL=chrome pnpm e2e:features
 $env:BROWSER_CHANNEL = "chrome"; pnpm e2e
 ```
 
-On macOS you most likely need `BROWSER_CHANNEL=chrome` unless you have Edge installed. Set `SHOTS_DIR=<folder>` to have the tests save screenshots there.
+On macOS you most likely need `BROWSER_CHANNEL=chrome` unless you have Edge installed. Without an installed browser (a container, CI image), point `BROWSER_PATH` at any Chromium binary. Set `SHOTS_DIR=<folder>` to have the tests save screenshots there.
 
 CI runs `pnpm lint`, the web and relay typechecks, `pnpm test`, `pnpm build`, `pnpm check:bundle`, `pnpm check:logs` and the e2e tests (with Chrome) on every push and pull request to `main`. See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 
@@ -111,7 +114,8 @@ melty/
 │  ├─ index.html
 │  ├─ vite.config.ts         build settings (no inlining, no modulepreload polyfill), preview headers
 │  ├─ headers.mjs            the CSP and other security headers, used by preview and production
-│  ├─ public/                static files served as-is (favicon, brand images)
+│  ├─ public/                static files served as-is (favicon, brand images, icons, manifest, robots.txt)
+│  ├─ sw.template.js         the service worker; the build fills in the list of files it may cache
 │  ├─ design-src/            reference images only; not shipped
 │  ├─ scripts/gen-vercel.mjs writes web/vercel.json for a Vercel deploy
 │  └─ src/
@@ -119,10 +123,13 @@ melty/
 │     ├─ App.tsx             top-level routing between home, room and how-it-works
 │     ├─ state/session.ts    the room session: keys, connection, messages, wipe. Everything is kept in memory here.
 │     ├─ crypto/
-│     │  ├─ derive.ts        secret → roomId + AES-256-GCM key (HKDF-SHA256)
-│     │  ├─ aead.ts          seal / open with AES-GCM, fresh random IV per message
+│     │  ├─ derive.ts        link secret → roomId + psk (HKDF-SHA256); room key import (non-extractable)
+│     │  ├─ frame.ts         room messages: padding, sender id + counter in the AAD, replay guard
+│     │  ├─ kx.ts            the hybrid X25519 + ML-KEM-768 key exchange, safety words, bundle sealing
+│     │  ├─ words.ts         4-word door codes and safety words (wordlist.ts: the EFF short list)
+│     │  ├─ aead.ts          seal / open with AES-GCM, fresh random IV
 │     │  ├─ message.ts       the inner (encrypted) message format and size limit
-│     │  └─ crypto.test.ts   unit tests for all of the above
+│     │  └─ *.test.ts        unit tests for all of the above
 │     ├─ net/relay.ts        WebSocket client for the relay
 │     ├─ lib/                small helpers: base64url, nicknames, router
 │     ├─ ui/                 React components
@@ -143,12 +150,14 @@ melty/
 │  ├─ wrangler.jsonc         worker config: observability off, ALLOWED_ORIGINS
 │  ├─ src/
 │  │  ├─ index.ts            the Worker: routing, origin check, creation limit, hands sockets to a Room
-│  │  ├─ room.ts             the Room Durable Object (one per room): forwarding, limits, expiry, lock / melt
+│  │  ├─ room.ts             the Room Durable Object (one per room): forwarding, key-exchange routing, lobby, limits, expiry, lock / melt
+│  │  ├─ door.ts             the Door Durable Object (one per set of 4 words): which room they point to, until expiry
+│  │  ├─ offer.ts            strict parsing of the Sec-WebSocket-Protocol offer
 │  │  ├─ protocol.ts         the wire protocol and limits, shared with web via the @relay/protocol alias
-│  │  ├─ limiter.ts          in-memory room-creation limiter
+│  │  ├─ limiter.ts          in-memory per-IP limits: connections, knocks, room creations
 │  │  └─ ws.ts               small WebSocket helpers
 │  └─ test/                  relay tests (run in workerd)
-└─ scripts/                  check-bundle, check-relay-logs, e2e-smoke, e2e-features
+└─ scripts/                  check-bundle, check-relay-logs, e2e-*, history-check, brand-images
 ```
 
 A new landing section usually means a new component in `web/src/ui/landing/` plus its own CSS file in `web/src/styles/`, imported in `main.tsx`. Use the tokens in `tokens.css` instead of hard-coded colours, so dark and light both work.
@@ -162,7 +171,7 @@ These come from the owner's spec. Every PR is checked against them.
 **Honest claims**
 
 - [ ] No claim in the UI, README or metadata that isn't demonstrably in the code.
-- [ ] No "post-quantum" until phase 2 is built and tested.
+- [ ] "post-quantum" only for the key exchange (X25519 + ML-KEM-768), which is built and tested; never for the app as a whole.
 - [ ] Never use "zk", "military grade", "100% anonymous", "unhackable" or "anonymous".
 
 **No storage, no logs**

@@ -127,3 +127,4 @@ A web app where anyone, without an account, opens a chat room and shares it by l
   4. finishing: a PWA that never caches messages, an OG image with the logo, Lighthouse 90+, an accessibility audit
 
   The pass-shop is deferred until the owner says so. No token work.
+- **Phase 2 and the finishing round (2026-10-09).** The owner asked to finish the project. Done: the 4 words, the hybrid X25519 + ML-KEM-768 key exchange (also for links, so links no longer carry the key), safety words, replay protection and padding, then the PWA, the OG image with the logo, Lighthouse 90+ and an automated accessibility audit. Deviations are in ASSUMPTIONS.md (anyone inside can hand over the key, not only the creator; the relay stores which room the words point to until expiry).

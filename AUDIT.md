@@ -1,12 +1,12 @@
 # AUDIT: melty
 
-The first audit was on 2026-10-08. This version shows the state after the fix round of 2026-10-09.
+The first audit was on 2026-10-08. This version shows the state after the fix round of 2026-10-09, updated after phase 2 and the finishing round (same day).
 
 Each item gets a status: **klopt** (true), **klopt niet** (not true) or **weet niet** (unknown), with evidence. Where the status changed after the fix round, the earlier finding is given as "was: …".
 
 **Checks for this version:**
-- `pnpm check`: lint, typecheck, 52 web tests + 35 relay tests, build, bundle check and log check, all green. Lint has 0 errors and 18 warnings (see §6).
-- All four browser tests against the production build (`vite preview` with a strict CSP): `e2e-smoke`, `e2e-features`, `e2e-xss` and `e2e-resilience` are green.
+- `pnpm check`: lint, typecheck, 88 web tests + 54 relay tests, build, bundle check and log check, all green. Lint has 0 errors and 0 warnings (see §6).
+- All five browser tests against the production build (`vite preview` with a strict CSP), run back to back: `e2e-smoke`, `e2e-features`, `e2e-xss`, `e2e-resilience` and `e2e-phase2` are green (headless Chromium 1194 in a container).
 
 ---
 
@@ -74,21 +74,32 @@ Each item gets a status: **klopt** (true), **klopt niet** (not true) or **weet n
 | Dependabot on | **klopt** (was: klopt niet) | `.github/dependabot.yml` (npm + github-actions) |
 | Secrets scan across the full history | **klopt** | gitleaks 8.30.1 run locally over all commits plus the working tree: no leaks. A gitleaks job is in CI. |
 | CI: lint, typecheck, all tests, browser tests | **klopt** (was: partly) | `ci.yml`: lint, web and relay typecheck, tests, build, checks, gitleaks, e2e (smoke, features, xss, resilience) |
-| Lint warnings | **weet niet** | 0 errors, 18 warnings: react-hooks (exhaustive-deps, set-state-in-effect, purity, refs) and jsx-a11y (click handlers on non-interactive elements, one autofocus). They don't block anything; clearing them is follow-up work. |
+| Lint warnings | **klopt** (was: weet niet) | 0 errors, 0 warnings. The `TODO(lint)` block is gone and its rules are errors again; the few justified exceptions are one-line disables with the reason next to them (`ASSUMPTIONS.md`, finishing round). |
 | docs/token internal, with a note in the README | **klopt** (was: klopt niet) | Note in `README.md` |
 
 ## 7. Phase 2
 
 | Item | Status | Evidence |
 |---|---|---|
-| Not started; no "post-quantum" claim | **klopt** | `CLAIMS.md` lists it under "not claimed" |
-| SPEC.md | **klopt** (was: weet niet) | `SPEC.md`: the original spec plus later rounds |
+| 4 words from the EFF short list, shipped locally | **klopt** | `web/src/crypto/wordlist.ts` (1296 words, sha256 of the source in the header), `words.ts`; tests "the list is the EFF short list…", "door codes roundtrip…" |
+| Words only point to the room, limited per IP, expire with the room | **klopt** | `relay/src/door.ts`, `limiter.ts` (10 knocks/min), lobby in `room.ts`; relay tests "a create registers the words…", "limits knocks to 10…", "words expire with their room", "a knocker never sees room traffic…" |
+| Hybrid handshake X25519 + ML-KEM-768, shared = HKDF(x ‖ m, "pq-hybrid-v1"), room key sent sealed | **klopt** | `web/src/crypto/kx.ts`; `kx.test.ts`; session tests; e2e-smoke and e2e-phase2 in real browsers |
+| Both sides arrive at the same secret | **klopt** | `kx.test.ts` "both sides arrive at the same secret…" (code and link mode) |
+| A man in the middle produces a different safety code | **klopt** | `kx.test.ts` "a man in the middle (code mode) ends up with a different safety code on each side" |
+| Links via the same handshake, so links don't carry the key | **klopt** | `derive.ts` `deriveLink`; link joins authenticated with the psk (`kx.test.ts` link-mode MITM tests; session tests) |
+| The creator has to be online | **klopt niet** (deliberately) | Any member can hand over the key; recorded as a deviation in `ASSUMPTIONS.md` |
+| Safety code compared outside the app | **klopt** | `RoomDoor.tsx` `CheckCard` (6 words, "say them out loud…"); e2e-phase2 "both see the same 6 safety words" |
+| Replay protection (counter in the AAD) | **klopt** | `crypto/frame.ts`, session test "drops a frame the relay plays a second time". Not covered: replays to someone who joined later (documented) |
+| Padding to fixed block sizes | **klopt** | `frame.ts` `pad`, relay enforces the three sizes; e2e-phase2 checks every frame on the wire |
+| "post-quantum" only after the tests pass | **klopt** | The claim appears only now, for the key exchange (`CLAIMS.md` #2) |
 
 ## 8. Finishing
 
 | Item | Status | Evidence |
 |---|---|---|
-| PWA, OG image with logo | **klopt niet** | Planned for step 4 |
-| Lighthouse 90+, screen-reader test | **weet niet** | Not measured yet |
-| Mobile | **klopt** (new) | Mobile pass at 360/390/414/landscape, dark and light: touch targets ≥44 px, no hover-only interactions, safe areas, iOS keyboard handled through `visualViewport`, bottom sheets, no horizontal scroll (`ASSUMPTIONS.md` "Mobile pass"). Measured in Edge mobile emulation; iOS Safari only reasoned about, not tested. |
-| Reduced motion stops heavy animations | **klopt** (was: partly) | Verified with `reducedMotion: "reduce"`: zero running animations on landing, how-it-works, sheets and room, and a still frost canvas. The steam stays visible (`mascot.css`). |
+| PWA that never caches messages | **klopt** (was: klopt niet) | `web/sw.template.js` (same-origin GETs for build files only), manifest and icons; e2e-smoke "the service worker cached only static app files" |
+| OG image with logo | **klopt** (was: klopt niet) | `web/public/brand/og.jpg`, made by `scripts/brand-images.mjs` |
+| Lighthouse 90+ | **klopt** (was: weet niet) | Lighthouse 12.8.2, mobile and desktop presets, home and how-it-works: performance 94–100 (home mobile varies 95–97 between runs), accessibility, best practices and SEO 100. Measured in headless Chromium in a container, not on a real phone. |
+| Accessibility audit | **klopt** for automated checks (was: weet niet) | axe-core 4.14, WCAG 2.2 AA + best practices, 9 screens × dark/light: no violations. A manual screen-reader session has **not** been done. |
+| Mobile | **klopt** | As before; the new door screens were checked at 390px (e2e-phase2 screenshots) |
+| Reduced motion stops heavy animations | **klopt** | As before; the new door screens switch their animations off under reduced motion (`door.css`) |
