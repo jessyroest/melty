@@ -137,7 +137,7 @@ export function RelayDiagram({ live }: { live: boolean }) {
   );
 }
 
-/** 03: sealed messages pass through the relay; storage only ever holds the expiry */
+/** 03: sealed messages pass through the relay; storage only ever holds the expiry and the creator's proof hash */
 export function StoreDiagram() {
   const [exp] = useState(() => Date.now() + 600_000);
   return (
@@ -156,7 +156,7 @@ export function StoreDiagram() {
         <span className="wd-store__label mono">server storage</span>
         <code className="wd-store__json mono">
           {"{ "}
-          <span className="wd-accent">"expiresAt"</span>: {exp}
+          <span className="wd-accent">"expiresAt"</span>: {exp}, <span className="wd-accent">"owner"</span>: "sha256…"
           {" }"}
           <span className="wd-caret" />
         </code>

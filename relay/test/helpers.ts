@@ -103,6 +103,10 @@ export function storageKeys(roomId: string): Promise<string[]> {
   return runInDurableObject(roomStub(roomId), async (_i, state) => [...(await state.storage.list()).keys()]);
 }
 
+export function storedValue(roomId: string, key: string): Promise<unknown> {
+  return runInDurableObject(roomStub(roomId), (_i, state) => state.storage.get(key));
+}
+
 export function setStored(roomId: string, key: string, value: number): Promise<void> {
   return runInDurableObject(roomStub(roomId), (_i, state) => state.storage.put(key, value));
 }

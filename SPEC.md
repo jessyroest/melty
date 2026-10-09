@@ -59,7 +59,7 @@ A web app where anyone, without an account, opens a chat room and shares it by l
    - `roomId = HKDF(secret, "room-id-v1")`
    - `roomKey = HKDF(secret, "room-key-v1")`, an AES-256-GCM key, non-extractable
 3. Messages are `{nick, text, ts}`, encrypted with AES-256-GCM, a random 12-byte IV and AAD = roomId. Only `{iv, ciphertext}` goes to the relay. System messages are encrypted too.
-4. The relay forwards ciphertext and stores nothing except the expiry time.
+4. The relay forwards ciphertext and stores nothing except the expiry time, the SHA-256 of the creator's owner secret, and a lock flag while locked.
 5. **Timer:** 10 min, 1 hour or 24 hours, set as a DO alarm.
    - At expiry the relay closes all sockets, wipes all state, and refuses the roomId for a margin.
    - The client shows the time left based on server time.

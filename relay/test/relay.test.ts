@@ -24,6 +24,7 @@ import {
   roomStub,
   setStored,
   storageKeys,
+  storedValue,
   tick,
 } from "./helpers";
 
@@ -265,7 +266,7 @@ describe("creator controls", () => {
     expect(await b.next()).toEqual({ t: "error", code: "bad" });
     await tick();
     expect(a.queue).toEqual([]);
-    expect(await storageKeys(id)).toEqual(["expiresAt"]);
+    expect(await storageKeys(id)).toEqual(["expiresAt", "owner"]);
   });
 
   it("a locked room refuses newcomers until it's unlocked; the creator can always get back in", async () => {
@@ -290,12 +291,92 @@ describe("creator controls", () => {
     expect(await d.next()).toMatchObject({ t: "hello", locked: false });
   });
 
-  it("owner and lock live only on the sockets, never in storage", async () => {
+  it("storage holds the owner hash (never the secret) and a lock flag, and drops both on unlock", async () => {
     const { id, owner, a, b } = await roomWithTwo();
+    expect(await storageKeys(id)).toEqual(["expiresAt", "owner"]);
+    expect(await storedValue(id, "owner")).toBe(owner.hash);
     a.send({ t: "lock", owner: owner.secret, on: true });
     await a.next();
     await b.next();
-    expect(await storageKeys(id)).toEqual(["expiresAt"]);
+    expect(await storageKeys(id)).toEqual(["expiresAt", "locked", "owner"]);
+    a.send({ t: "lock", owner: owner.secret, on: false });
+    await a.next();
+    expect(await storageKeys(id)).toEqual(["expiresAt", "owner"]);
+  });
+
+  it("a creator alone who drops can reconnect and still melt", async () => {
+    const id = randomRoomId();
+    const owner = await makeOwner();
+    const a = await connect(id, { create: 600, owner: owner.hash });
+    await a.next();
+    a.ws.close(1000);
+    await tick(100);
+    const again = await connect(id, { owner: owner.hash });
+    expect(await again.next()).toMatchObject({ t: "hello", n: 1 });
+    again.send({ t: "melt", owner: owner.secret });
+    expect(await again.next()).toEqual({ t: "melted" });
+    expect(await storageKeys(id)).toEqual(["goneUntil"]);
+  });
+
+  it("a creator alone who drops keeps the lock, and the creator can still unlock", async () => {
+    const id = randomRoomId();
+    const owner = await makeOwner();
+    const a = await connect(id, { create: 600, owner: owner.hash });
+    await a.next();
+    a.send({ t: "lock", owner: owner.secret, on: true });
+    expect(await a.next()).toEqual({ t: "locked", on: true });
+    a.ws.close(1000);
+    await tick(100);
+
+    const c = await connect(id);
+    expect(await c.next()).toEqual({ t: "error", code: "locked" });
+    const thief = await makeOwner();
+    const t = await connect(id, { owner: thief.hash });
+    expect(await t.next()).toEqual({ t: "error", code: "locked" });
+
+    const back = await connect(id, { owner: owner.hash });
+    expect(await back.next()).toMatchObject({ t: "hello", locked: true });
+    back.send({ t: "lock", owner: owner.secret, on: false });
+    expect(await back.next()).toEqual({ t: "locked", on: false });
+  });
+
+  it("a wrong o.<hash> on an empty room gains nothing and doesn't replace the stored owner", async () => {
+    const id = randomRoomId();
+    const owner = await makeOwner();
+    const a = await connect(id, { create: 600, owner: owner.hash });
+    await a.next();
+    a.send({ t: "lock", owner: owner.secret, on: true });
+    await a.next();
+    a.ws.close(1000);
+    await tick(100);
+
+    const thief = await makeOwner();
+    const t = await connect(id, { owner: thief.hash });
+    expect(await t.next()).toEqual({ t: "error", code: "locked" });
+    expect(await storedValue(id, "owner")).toBe(owner.hash);
+
+    // a create on an existing room is refused as a hijack attempt; its owner is never replaced
+    const t2 = await connect(id, { create: 600, owner: thief.hash });
+    expect(await t2.next()).toEqual({ t: "error", code: "taken" });
+    expect(await storedValue(id, "owner")).toBe(owner.hash);
+
+    const back = await connect(id, { owner: owner.hash });
+    expect((await back.next()).t).toBe("hello");
+    back.send({ t: "melt", owner: thief.secret });
+    expect(await back.next()).toEqual({ t: "error", code: "bad" });
+  });
+
+  it("owner and lock are gone from storage after expiry, keeping only the tombstone", async () => {
+    const id = randomRoomId();
+    const owner = await makeOwner();
+    const a = await connect(id, { create: 600, owner: owner.hash });
+    await a.next();
+    a.send({ t: "lock", owner: owner.secret, on: true });
+    await a.next();
+    await setStored(id, "expiresAt", Date.now() - 1);
+    const late = await connect(id, { owner: owner.hash });
+    expect(await late.next()).toEqual({ t: "error", code: "gone" });
+    expect(await storageKeys(id)).toEqual(["goneUntil"]);
   });
 
   it("joining an empty room can't claim ownership", async () => {
@@ -379,7 +460,7 @@ describe("transport: everything in Sec-WebSocket-Protocol, nothing in the URL", 
     const b = await connect(id);
     expect(await b.next()).toMatchObject({ t: "hello", ttl: 3600, n: 2 });
     // the room object is keyed by the id from the header, and owner rights came through it
-    expect(await storageKeys(id)).toEqual(["expiresAt"]);
+    expect(await storageKeys(id)).toEqual(["expiresAt", "owner"]);
     expect(await a.next()).toEqual({ t: "presence", n: 2 });
     a.send({ t: "lock", owner: owner.secret, on: true });
     expect(await a.next()).toEqual({ t: "locked", on: true });

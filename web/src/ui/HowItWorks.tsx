@@ -76,7 +76,7 @@ const STEPS: { tag: string; title: string; body: ReactNode }[] = [
     title: "it melts",
     body: (
       <>
-        the relay forwards ciphertext and stores only the expiry time (and, for the words, which room they point to).
+        the relay forwards ciphertext and stores only the expiry time, a hash of the creator's proof (so the creator keeps the controls after a reconnect), and, for the words, which room they point to.
         an alarm fires: it tells everyone, closes every connection and deletes the room and its words. your browser
         zeroes the secrets and drops the key and the messages, which only ever lived in memory.
       </>
@@ -115,7 +115,7 @@ const DOESNT: ReactNode[] = [
   </>,
   <>
     <strong>someone forwarding the link.</strong> while someone is inside, whoever has it gets the key and can post
-    under any nickname. nicknames are not verified.
+    under any nickname, including fake "joined", "left" or rename notices. nicknames are not verified.
   </>,
   <>
     <strong>where the link travels:</strong> the messenger you shared it in, your clipboard, browser history. opening a
@@ -249,7 +249,7 @@ export function HowItWorks() {
             which stays in your browser. the room key is separate and never in the link. you share the link yourself;
             the secret part never reaches the relay. the other browsers get the room key from someone inside, through
             a post-quantum key exchange. messages leave your browser as ciphertext, go through the relay, which stores
-            only the expiry time, and reach the others. at expiry the room is deleted and every browser drops the
+            only the expiry time and a hash of the creator's proof, and reach the others. at expiry the room is deleted and every browser drops the
             key.
           </p>
         </figcaption>

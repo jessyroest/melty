@@ -125,12 +125,15 @@ function Relay({ x, y }: { x: number; y: number }) {
       <text className="hd-s" x="20" y="69">
         stores none of it
       </text>
-      <rect className="hd-store" x="20" y="84" width="160" height="46" rx="11" />
-      <text className="hd-s" x="34" y="103">
+      <rect className="hd-store" x="20" y="80" width="160" height="58" rx="11" />
+      <text className="hd-s" x="34" y="97">
         stores only
       </text>
-      <text className="hd-t hd-acc" x="34" y="121">
-        {"{ expiresAt }"}
+      <text className="hd-t hd-acc" x="34" y="114">
+        {"{ expiresAt,"}
+      </text>
+      <text className="hd-t hd-acc" x="42" y="129">
+        {"owner hash }"}
       </text>
     </g>
   );

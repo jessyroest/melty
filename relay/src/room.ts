@@ -42,7 +42,8 @@ import {
  * addresses key-exchange frames. It's told to the socket in its hello.
  * `ttl` (seconds) lets later joiners learn the room's total lifetime without storing it.
  * `owner` (SHA-256 of the creator's secret) and `locked` are room-wide; every socket carries a
- * copy, so they live as long as somebody is connected and are never written to storage.
+ * copy. They are also kept in storage (see Room) so they survive an empty room, but the copy on
+ * the sockets is what the checks read while anybody is connected.
  * `lobby`: knocked with 4 words and hasn't been let in. It can only exchange key-exchange
  * frames with members, never sees room traffic, and doesn't count as a person.
  */
@@ -59,8 +60,11 @@ type Attachment = {
 };
 
 /**
- * One Durable Object per room. It relays ciphertext between sockets and stores
- * nothing but `expiresAt` (and, after expiry, a `goneUntil` tombstone).
+ * One Durable Object per room. It relays ciphertext between sockets and stores only:
+ * `expiresAt`; `owner`, the SHA-256 of the creator's owner secret (a hash, never the secret),
+ * written once by the creating request; `locked`, present only while the room is locked,
+ * written only after a verified creator frame; and, after expiry, a `goneUntil` tombstone.
+ * `expire()` runs `deleteAll()`, so owner and locked go with the room.
  */
 export class Room extends DurableObject<Env> {
   /**
@@ -97,6 +101,8 @@ export class Room extends DurableObject<Env> {
       if (now < goneUntil) return this.reject(create === null ? "gone" : "taken");
       await this.ctx.storage.deleteAll();
       expiresAt = undefined;
+      loaded.owner = undefined;
+      loaded.locked = false;
     }
     if (expiresAt !== undefined && now >= expiresAt) {
       await this.expire(expiresAt);
@@ -112,18 +118,22 @@ export class Room extends DurableObject<Env> {
         if (!(await door.claim(request.headers.get(ROOM_HEADER) ?? "", expiresAt))) return this.reject("taken");
       }
       await this.ctx.storage.put("expiresAt", expiresAt);
+      // written only here, by the creating request, and never overwritten: later requests only read it
+      if (ownerParam !== undefined) await this.ctx.storage.put("owner", ownerParam);
       await this.ctx.storage.setAlarm(expiresAt);
       creating = true;
     }
 
     const peers = this.open();
     const room = (peers[0] ?? this.lobby()[0])?.deserializeAttachment() as Attachment | null | undefined;
+    // the sockets' copy while anybody is connected, else what the creating request stored
+    const roomOwner = room?.owner ?? loaded.owner;
     // a create for a room that already exists is a collision or an attempt to hijack it,
     // unless it's the creator retrying a create whose hello never arrived
-    if (create !== null && !creating && !(ownerParam !== undefined && room?.owner === ownerParam)) return this.reject("taken");
-    // only the request that creates the room can set the owner; an empty room has no owner left
-    const owner = creating ? ownerParam : room?.owner;
-    const locked = room?.locked ?? false;
+    if (create !== null && !creating && !(ownerParam !== undefined && roomOwner === ownerParam)) return this.reject("taken");
+    // only the request that creates the room can set the owner; everyone else inherits the stored one
+    const owner = creating ? ownerParam : roomOwner;
+    const locked = creating ? false : (room?.locked ?? loaded.locked);
     if (locked && !(owner !== undefined && ownerParam === owner && !knocking)) return this.reject("locked");
     if (peers.length >= MAX_PARTICIPANTS) return this.reject("full");
     if (knocking) {
@@ -279,6 +289,8 @@ export class Room extends DurableObject<Env> {
       await this.expire(expiresAt ?? Date.now(), "melted");
       return;
     }
+    if (f.on) await this.ctx.storage.put("locked", true);
+    else await this.ctx.storage.delete("locked");
     for (const p of [...this.open(), ...this.lobby()]) {
       const a = p.deserializeAttachment() as Attachment;
       a.locked = f.on;
@@ -344,9 +356,14 @@ export class Room extends DurableObject<Env> {
     return this.ctx.getWebSockets().filter((ws) => ws.readyState === WebSocket.OPEN && idOf(ws) !== undefined);
   }
 
-  private async load(): Promise<{ expiresAt?: number; goneUntil?: number }> {
-    const m = await this.ctx.storage.get<number>(["expiresAt", "goneUntil"]);
-    return { expiresAt: m.get("expiresAt"), goneUntil: m.get("goneUntil") };
+  private async load(): Promise<{ expiresAt?: number; goneUntil?: number; owner?: string; locked: boolean }> {
+    const m = await this.ctx.storage.get<number | string | boolean>(["expiresAt", "goneUntil", "owner", "locked"]);
+    return {
+      expiresAt: m.get("expiresAt") as number | undefined,
+      goneUntil: m.get("goneUntil") as number | undefined,
+      owner: m.get("owner") as string | undefined,
+      locked: m.get("locked") === true,
+    };
   }
 }
 
