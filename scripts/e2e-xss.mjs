@@ -52,7 +52,8 @@ const PAYLOADS = [
 ];
 const NICK = `<b>x</b>${RLO}evil`;
 
-const browser = await chromium.launch({ channel });
+// BROWSER_PATH: a Chromium binary instead of an installed channel (e.g. in a container)
+const browser = await chromium.launch(process.env.BROWSER_PATH ? { executablePath: process.env.BROWSER_PATH } : { channel });
 const dialogs = [];
 const violations = [];
 

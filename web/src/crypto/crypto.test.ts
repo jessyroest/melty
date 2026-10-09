@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { fromB64url, toB64url } from "../lib/b64url";
 import { open, seal } from "./aead";
-import { deriveRoom, newSecret, SECRET_BYTES } from "./derive";
+import { deriveLink, deriveRoom, importRoomKey, newSecret, SECRET_BYTES } from "./derive";
 import { decodeInner, encodeInner, newMsgId, TooLarge } from "./message";
 
 const enc = new TextEncoder();
@@ -27,29 +27,30 @@ describe("b64url", () => {
   });
 });
 
+const roomKey = () => crypto.getRandomValues(new Uint8Array(32));
+
 describe("hkdf derivation", () => {
-  it("same secret gives the same roomId and key", async () => {
+  it("same link secret gives the same roomId and psk", async () => {
     const secret = newSecret();
-    const a = await deriveRoom(secret);
-    const b = await deriveRoom(secret.slice());
+    const a = await deriveLink(secret);
+    const b = await deriveLink(secret.slice());
     expect(a.roomId).toBe(b.roomId);
-    const sealed = await seal(a.key, a.aad, enc.encode("hi"));
-    expect(dec.decode(await open(b.key, b.aad, sealed))).toBe("hi");
+    expect(a.psk).toEqual(b.psk);
   });
 
-  it("different secrets give different roomIds and keys", async () => {
-    const a = await deriveRoom(newSecret());
-    const b = await deriveRoom(newSecret());
+  it("different secrets give different roomIds and psks", async () => {
+    const a = await deriveLink(newSecret());
+    const b = await deriveLink(newSecret());
     expect(a.roomId).not.toBe(b.roomId);
-    const sealed = await seal(a.key, a.aad, enc.encode("hi"));
-    await expect(open(b.key, a.aad, sealed)).rejects.toThrow();
+    expect(a.psk).not.toEqual(b.psk);
   });
 
-  it("roomId doesn't contain or equal the secret", async () => {
+  it("roomId and psk don't contain or equal the secret, nor each other", async () => {
     for (let i = 0; i < 20; i++) {
       const secret = newSecret();
-      const { roomId, aad } = await deriveRoom(secret);
+      const { roomId, aad, psk } = await deriveLink(secret);
       expect(aad).not.toEqual(secret);
+      expect(aad).not.toEqual(psk);
       expect(roomId).not.toBe(toB64url(secret));
       // no 8-byte window of the secret shows up in the roomId bytes
       const idHex = Buffer.from(aad).toString("hex");
@@ -59,42 +60,43 @@ describe("hkdf derivation", () => {
     }
   });
 
-  it("roomId and key are independent outputs (key can't be read back)", async () => {
-    const { key, roomId } = await deriveRoom(newSecret());
+  it("the room key is non-extractable AES-256-GCM", async () => {
+    const { key, roomId } = await deriveRoom(newSecret(), roomKey());
     expect(key.extractable).toBe(false);
     expect(key.algorithm).toMatchObject({ name: "AES-GCM", length: 256 });
     await expect(crypto.subtle.exportKey("raw", key)).rejects.toThrow();
     expect(fromB64url(roomId)).toHaveLength(32);
   });
 
-  it("only accepts 32-byte secrets", async () => {
-    await expect(deriveRoom(new Uint8Array(16))).rejects.toThrow();
+  it("only accepts 32-byte secrets and keys", async () => {
+    await expect(deriveLink(new Uint8Array(16))).rejects.toThrow();
+    await expect(importRoomKey(new Uint8Array(16))).rejects.toThrow();
   });
 });
 
 describe("aes-gcm", () => {
   it("roundtrips", async () => {
-    const { key, aad } = await deriveRoom(newSecret());
+    const { key, aad } = await deriveRoom(newSecret(), roomKey());
     const msg = enc.encode("the ice is thin 🧊");
     expect(dec.decode(await open(key, aad, await seal(key, aad, msg)))).toBe("the ice is thin 🧊");
   });
 
   it("uses a fresh IV every time", async () => {
-    const { key, aad } = await deriveRoom(newSecret());
+    const { key, aad } = await deriveRoom(newSecret(), roomKey());
     const ivs = new Set<string>();
     for (let i = 0; i < 50; i++) ivs.add((await seal(key, aad, enc.encode("x"))).iv);
     expect(ivs.size).toBe(50);
   });
 
   it("fails with the wrong key", async () => {
-    const a = await deriveRoom(newSecret());
-    const b = await deriveRoom(newSecret());
+    const a = await deriveRoom(newSecret(), roomKey());
+    const b = await deriveRoom(newSecret(), roomKey());
     const sealed = await seal(a.key, a.aad, enc.encode("secret"));
     await expect(open(b.key, a.aad, sealed)).rejects.toThrow();
   });
 
   it("fails on a tampered ciphertext, tag, IV or AAD", async () => {
-    const { key, aad } = await deriveRoom(newSecret());
+    const { key, aad } = await deriveRoom(newSecret(), roomKey());
     const sealed = await seal(key, aad, enc.encode("secret message"));
     const ctLen = fromB64url(sealed.ct).length;
     await expect(open(key, aad, { ...sealed, ct: flip(sealed.ct, 0) })).rejects.toThrow();
@@ -103,14 +105,6 @@ describe("aes-gcm", () => {
     const otherAad = aad.slice();
     otherAad[0] = otherAad[0]! ^ 1;
     await expect(open(key, otherAad, sealed)).rejects.toThrow();
-  });
-
-  it("binds messages to their room (AAD = roomId)", async () => {
-    const secret = newSecret();
-    const a = await deriveRoom(secret);
-    const b = await deriveRoom(newSecret());
-    const sealed = await seal(a.key, a.aad, enc.encode("only for room a"));
-    await expect(open(a.key, b.aad, sealed)).rejects.toThrow();
   });
 });
 

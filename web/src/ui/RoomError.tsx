@@ -119,12 +119,45 @@ const SCREENS: Record<RoomErrorKind, Screen> = {
     tone: "warm",
     actions: ["join", "new"],
   },
+  nobody: {
+    label: "door · no answer",
+    title: "nobody came to the door",
+    lead: NOTICES.nobodyLink,
+    detail: "the key only comes from someone inside. when they're back, try again.",
+    left: 1,
+    mood: "sleepy",
+    badge: "unknown",
+    tone: "warm",
+    actions: ["retry", "new"],
+  },
+  turned_away: {
+    label: "door · closed",
+    title: "not this time",
+    lead: NOTICES.turnedAway,
+    detail: "if that was a mistake, ask them to let you in, then knock again with the words.",
+    left: 1,
+    mood: "surprised",
+    badge: "lock",
+    tone: "warm",
+    actions: ["join", "new"],
+  },
+  mismatch: {
+    label: "safety words · different",
+    title: "the words didn't match",
+    lead: NOTICES.mismatch,
+    detail: "tell the others through another channel. a fresh room and a fresh set of words is the safe way on.",
+    left: 1,
+    mood: "wide",
+    crack: true,
+    tone: "warm",
+    actions: ["new", "home"],
+  },
 };
 
 const LABELS: Record<Action, string> = {
   retry: "try again",
   new: "open a new room",
-  join: "join with a link",
+  join: "join with a link or words",
   home: "back to start",
 };
 
@@ -143,7 +176,7 @@ export function RoomError({ kind, notice, onRetry, onNewRoom, onJoin, onHome }: 
   const s = SCREENS[kind];
   const heading = useRef<HTMLHeadingElement>(null);
   const melt = kind === "expired" || kind === "melted";
-  const keyKept = kind === "unreachable";
+  const keyKept = kind === "unreachable" || kind === "nobody";
 
   // land screen readers and keyboards on the news, not on the old page
   useEffect(() => {
@@ -173,9 +206,11 @@ export function RoomError({ kind, notice, onRetry, onNewRoom, onJoin, onHome }: 
           <p className={`rerr__key mono${keyKept ? " is-kept" : ""}`}>
             <KeyIcon />
             <span>
-              {keyKept
-                ? "the room key is still only in this tab's memory. close the tab or open a new room and it's wiped."
-                : "the room key is gone from this tab."}
+              {kind === "nobody"
+                ? "the link or words are still only in this tab's memory. close the tab or open a new room and they're wiped."
+                : keyKept
+                  ? "the link (and the room key, if this tab had it) is still only in its memory. close the tab or open a new room and it's wiped."
+                  : "the room key is gone from this tab."}
             </span>
           </p>
           <div className="rerr__actions">

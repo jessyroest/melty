@@ -14,7 +14,8 @@ const check = (ok, what) => {
   if (!ok) failures.push(what);
 };
 
-const browser = await chromium.launch({ channel });
+// BROWSER_PATH: a Chromium binary instead of an installed channel (e.g. in a container)
+const browser = await chromium.launch(process.env.BROWSER_PATH ? { executablePath: process.env.BROWSER_PATH } : { channel });
 const violations = [];
 
 async function person() {

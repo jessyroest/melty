@@ -165,7 +165,15 @@ function StatusPill({ status }: { status: Status }) {
   return (
     <span className={`r-status r-status--${status}`} aria-live="polite">
       <span className="r-status__dot" aria-hidden="true" />
-      {status === "live" ? "live" : status === "connecting" ? "connecting…" : "reconnecting…"}
+      {status === "live"
+        ? "live"
+        : status === "connecting"
+          ? "connecting…"
+          : status === "reconnecting"
+            ? "reconnecting…"
+            : status === "knocking"
+              ? "knocking…"
+              : "getting the key…"}
     </span>
   );
 }

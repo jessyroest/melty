@@ -138,11 +138,12 @@ describe("expiry", () => {
     expect((await b.closed).code).toBe(CLOSE.expired);
     expect(await storageKeys(id)).toEqual(["goneUntil"]);
 
-    for (const create of [undefined, 600]) {
-      const c = await connect(id, { create });
-      expect(await c.next()).toEqual({ t: "error", code: "gone" });
-      expect((await c.closed).code).toBe(CLOSE.gone);
-    }
+    const c = await connect(id);
+    expect(await c.next()).toEqual({ t: "error", code: "gone" });
+    expect((await c.closed).code).toBe(CLOSE.gone);
+    // and a create can't bring the id back
+    const d = await connect(id, { create: 600 });
+    expect(await d.next()).toEqual({ t: "error", code: "taken" });
   });
 
   it("drops the tombstone after the margin and keeps nothing at all", async () => {

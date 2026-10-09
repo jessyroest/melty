@@ -4,6 +4,7 @@ import {
   PROTO_CREATE,
   PROTO_OWNER,
   PROTO_ROOM,
+  PROTO_WORDS,
   type ServerFrame,
   SUBPROTOCOL,
   type Ttl,
@@ -14,7 +15,9 @@ import type { Sealed } from "../crypto/aead";
 export const RELAY_URL: string = import.meta.env.VITE_RELAY_URL ?? "ws://localhost:8787";
 
 export type RelayEvent =
-  | { type: "hello"; now: number; expiresAt: number; ttl: number; n: number; locked: boolean }
+  | { type: "hello"; now: number; expiresAt: number; ttl: number; n: number; locked: boolean; tag: string; lobby: boolean }
+  /** a key-exchange frame from the socket tagged `from` */
+  | { type: "kx"; from: string; d: string }
   | { type: "locked"; on: boolean }
   | { type: "melted" }
   | { type: "presence"; n: number }
@@ -28,13 +31,24 @@ export type RelayEvent =
 const PING_MS = 30_000;
 
 /**
- * The subprotocol offer that carries the room: `melty.v1, r.<roomId>[, c.<ttl>][, o.<ownerHash>]`.
- * It travels in the `Sec-WebSocket-Protocol` header, so nothing about the room is in the URL.
+ * Where a connection goes: a room by id (joining, or creating it with a ttl, the owner hash
+ * and its words), or a knock with 4 words, which lands in the room's lobby.
  */
-export function relayProtocols(roomId: string, create?: Ttl, owner?: string): string[] {
-  const protocols = [SUBPROTOCOL, PROTO_ROOM + roomId];
-  if (create) protocols.push(PROTO_CREATE + String(create));
-  if (owner) protocols.push(PROTO_OWNER + owner);
+export type Target =
+  | { roomId: string; create?: Ttl; owner?: string; words?: string }
+  | { knock: string };
+
+/**
+ * The subprotocol offer that carries the room: `melty.v1, r.<roomId>[, c.<ttl>][, o.<ownerHash>][, w.<words>]`,
+ * or `melty.v1, w.<words>` to knock. It travels in the `Sec-WebSocket-Protocol` header, so nothing
+ * about the room is in the URL.
+ */
+export function relayProtocols(target: Target): string[] {
+  if ("knock" in target) return [SUBPROTOCOL, PROTO_WORDS + target.knock];
+  const protocols = [SUBPROTOCOL, PROTO_ROOM + target.roomId];
+  if (target.create) protocols.push(PROTO_CREATE + String(target.create));
+  if (target.owner) protocols.push(PROTO_OWNER + target.owner);
+  if (target.create && target.words) protocols.push(PROTO_WORDS + target.words);
   return protocols;
 }
 
@@ -45,15 +59,13 @@ export class RelayConnection {
   private done = false;
   private opened = false;
 
-  /** `owner` is the SHA-256 of the creator's secret; only the creator ever has one */
+  /** a create's `owner` is the SHA-256 of the creator's secret; only the creator ever has one */
   constructor(
-    roomId: string,
-    create: Ttl | undefined,
-    owner: string | undefined,
+    target: Target,
     private onEvent: (e: RelayEvent) => void,
   ) {
-    // a fixed path; the room id, ttl and owner hash go in the subprotocol offer
-    this.ws = new WebSocket(new URL(WS_PATH, RELAY_URL), relayProtocols(roomId, create, owner));
+    // a fixed path; the room id, ttl, owner hash and words go in the subprotocol offer
+    this.ws = new WebSocket(new URL(WS_PATH, RELAY_URL), relayProtocols(target));
     this.ws.onopen = () => {
       this.opened = true;
       this.ping = setInterval(() => this.ws.send('{"t":"ping"}'), PING_MS);
@@ -86,6 +98,14 @@ export class RelayConnection {
     return true;
   }
 
+  /** a key-exchange frame, to one socket by tag, or to every member */
+  sendKx(to: string | undefined, d: string): boolean {
+    if (!this.open) return false;
+    const frame: ClientFrame = to === undefined ? { t: "kx", d } : { t: "kx", to, d };
+    this.ws.send(JSON.stringify(frame));
+    return true;
+  }
+
   /** creator-only control frames: they carry no message content */
   control(frame: Extract<ClientFrame, { t: "melt" | "lock" }>): boolean {
     if (!this.open) return false;
@@ -108,7 +128,19 @@ export class RelayConnection {
   private handle(f: ServerFrame): void {
     switch (f.t) {
       case "hello":
-        return this.onEvent({ type: "hello", now: f.now, expiresAt: f.expiresAt, ttl: f.ttl, n: f.n, locked: !!f.locked });
+        return this.onEvent({
+          type: "hello",
+          now: f.now,
+          expiresAt: f.expiresAt,
+          ttl: f.ttl,
+          n: f.n,
+          locked: !!f.locked,
+          tag: typeof f.tag === "string" ? f.tag : "",
+          lobby: f.lobby === true,
+        });
+      case "kx":
+        if (typeof f.from !== "string" || typeof f.d !== "string") return;
+        return this.onEvent({ type: "kx", from: f.from, d: f.d });
       case "locked":
         return this.onEvent({ type: "locked", on: !!f.on });
       case "melted":

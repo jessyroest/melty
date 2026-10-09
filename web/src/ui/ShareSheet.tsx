@@ -19,7 +19,7 @@ function qrPath(text: string): { d: string; size: number } {
 
 type CopyState = "idle" | "copied" | "manual";
 
-export function ShareSheet({ link, onClose }: { link: string; onClose: () => void }) {
+export function ShareSheet({ link, words, onClose }: { link: string; words: string[] | null; onClose: () => void }) {
   const copyBtn = useRef<HTMLButtonElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const { ref, onClick } = useSheet(onClose, copyBtn);
@@ -69,8 +69,9 @@ export function ShareSheet({ link, onClose }: { link: string; onClose: () => voi
       <p className="warn">
         <EyeIcon className="warn__icon" />
         <span>
-          <strong>anyone with this link can read along.</strong> the key is in the link itself. share it only with the
-          people you mean, through a channel you trust.
+          <strong>anyone with this link gets in while someone's inside.</strong> the link doesn't hold the room key,
+          but whoever opens it is handed the key automatically. share it only with the people you mean, through a
+          channel you trust.
         </span>
       </p>
 
@@ -142,8 +143,25 @@ export function ShareSheet({ link, onClose }: { link: string; onClose: () => voi
             {copied === "copied" ? "link copied" : copied === "manual" ? "link selected" : ""}
           </span>
           <p className="r-share__note">
-            the part after <code>#</code> is the key. it never reaches the server.
+            the part after <code>#</code> never reaches the server. it proves you got the link, and only works while the
+            room is open.
           </p>
+          {words && (
+            <div className="r-words">
+              <span className="field__label" id="words-label">
+                or say these 4 words
+              </span>
+              <ol className="r-words__list mono" aria-labelledby="words-label">
+                {words.map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
+              </ol>
+              <p className="r-words__note">
+                they type them under "join a room". the words only find the room: someone inside still has to let them in,
+                and you compare 6 safety words.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </dialog>

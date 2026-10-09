@@ -1,7 +1,9 @@
+import { doorName } from "./door";
 import { parseOffer } from "./offer";
 import { type ErrorCode, WS_PATH } from "./protocol";
-import { CREATE_HEADER, INTERNAL_PREFIX, OWNER_HEADER, REJECT_HEADER } from "./ws";
+import { CREATE_HEADER, INTERNAL_PREFIX, LOBBY_HEADER, OWNER_HEADER, REJECT_HEADER, ROOM_HEADER, WORDS_HEADER } from "./ws";
 
+export { Door } from "./door";
 export { Limiter } from "./limiter";
 export { Room } from "./room";
 
@@ -20,12 +22,27 @@ export default {
     // no room to answer through, or not our client: a plain refusal
     if (!offer) return plain(400);
 
-    const room = env.ROOM.get(env.ROOM.idFromName(offer.roomId));
     // internal headers are ours alone; never pass one through from the client
     const headers = new Headers();
     for (const [k, v] of request.headers) {
       if (!k.toLowerCase().startsWith(INTERNAL_PREFIX) && k.toLowerCase() !== "sec-websocket-protocol") headers.set(k, v);
     }
+    const ip = request.headers.get("CF-Connecting-IP") ?? "";
+
+    if (offer.ok && offer.kind === "knock") {
+      // knocking with 4 words: limited per address, then looked up; refusals answer through the door
+      const door = env.DOOR.get(env.DOOR.idFromName(doorName(offer.words)));
+      const verdict = await limiterFor(env, ip).then((l) => l.admit(ip, "knock"));
+      const roomId = verdict === "ok" ? await door.lookup() : null;
+      if (roomId === null) {
+        if (verdict !== "ok") headers.set(REJECT_HEADER, verdict);
+        return door.fetch(new Request(request, { headers }));
+      }
+      headers.set(LOBBY_HEADER, "1");
+      return env.ROOM.get(env.ROOM.idFromName(roomId)).fetch(new Request(request, { headers }));
+    }
+
+    const room = env.ROOM.get(env.ROOM.idFromName(offer.roomId));
     const forward = () => room.fetch(new Request(request, { headers }));
     const refuse = (code: ErrorCode) => {
       headers.set(REJECT_HEADER, code);
@@ -33,14 +50,17 @@ export default {
     };
 
     // every attempt counts, before the room is touched
-    const ip = request.headers.get("CF-Connecting-IP") ?? "";
     const creating = offer.ok && offer.create !== undefined;
-    const verdict = await limiterFor(env, ip).then((l) => l.admit(ip, creating));
+    const verdict = await limiterFor(env, ip).then((l) => l.admit(ip, creating ? "create" : "join"));
     if (verdict !== "ok") return refuse(verdict);
     if (!offer.ok) return refuse("bad");
 
     if (offer.create !== undefined) headers.set(CREATE_HEADER, String(offer.create));
     if (offer.owner !== undefined) headers.set(OWNER_HEADER, offer.owner);
+    if (offer.words !== undefined) {
+      headers.set(WORDS_HEADER, offer.words);
+      headers.set(ROOM_HEADER, offer.roomId);
+    }
     return forward();
   },
 } satisfies ExportedHandler<Env>;

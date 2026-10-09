@@ -87,16 +87,18 @@ jobs:
         env:
           BROWSER_CHANNEL: chrome
 
-      # These two scripts are new; each step is skipped (not failed) until its file exists.
       - name: e2e xss
-        run: |
-          if [ -f scripts/e2e-xss.mjs ]; then pnpm e2e:xss; else echo "scripts/e2e-xss.mjs not present, skipping"; fi
+        run: pnpm e2e:xss
         env:
           BROWSER_CHANNEL: chrome
 
       - name: e2e resilience
-        run: |
-          if [ -f scripts/e2e-resilience.mjs ]; then pnpm e2e:resilience; else echo "scripts/e2e-resilience.mjs not present, skipping"; fi
+        run: pnpm e2e:resilience
+        env:
+          BROWSER_CHANNEL: chrome
+
+      - name: e2e phase 2 (words, key exchange, safety words, padding)
+        run: pnpm e2e:phase2
         env:
           BROWSER_CHANNEL: chrome
 

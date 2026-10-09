@@ -23,7 +23,8 @@ const check = (ok, what) => {
   if (!ok) failures.push(what);
 };
 
-const browser = await chromium.launch({ channel });
+// BROWSER_PATH: a Chromium binary instead of an installed channel (e.g. in a container)
+const browser = await chromium.launch(process.env.BROWSER_PATH ? { executablePath: process.env.BROWSER_PATH } : { channel });
 const violations = [];
 
 async function person() {
@@ -119,7 +120,7 @@ try {
   }, new URL(link).hash.slice(1));
   await d.page.getByRole("heading", { name: "can't reach the relay" }).waitFor({ timeout: 15000 });
   check(true, "an unreachable relay gets its own screen");
-  check(await d.page.getByText("the room key is still only in this tab's memory.", { exact: false }).isVisible(), "the unreachable screen says the key is still in memory");
+  check(await d.page.getByText("is still only in its memory.", { exact: false }).isVisible(), "the unreachable screen says the link is still in memory");
   check(await d.page.getByRole("button", { name: "try again" }).isVisible(), "it offers try again");
   if (SHOTS) await d.page.screenshot({ path: `${SHOTS}/resilience-unreachable.png` });
   await d.ctx.setOffline(false);

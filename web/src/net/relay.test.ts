@@ -31,7 +31,7 @@ describe("RelayConnection transport", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("connects to the fixed path /ws: no room id, ttl or owner in the URL", () => {
-    new RelayConnection(ROOM, 600, OWNER, () => {});
+    new RelayConnection({ roomId: ROOM, create: 600, owner: OWNER, words: "1-2-3-4" }, () => {});
     const url = new URL(String(FakeSocket.last.url));
     expect(url.pathname).toBe("/ws");
     expect(url.search).toBe("");
@@ -42,23 +42,28 @@ describe("RelayConnection transport", () => {
   });
 
   it("puts everything in the subprotocol offer, as HTTP tokens", () => {
-    new RelayConnection(ROOM, 3600, OWNER, () => {});
-    expect(FakeSocket.last.protocols).toEqual([SUBPROTOCOL, `r.${ROOM}`, "c.3600", `o.${OWNER}`]);
-    new RelayConnection(ROOM, undefined, undefined, () => {});
+    new RelayConnection({ roomId: ROOM, create: 3600, owner: OWNER, words: "12-345-6-1295" }, () => {});
+    expect(FakeSocket.last.protocols).toEqual([SUBPROTOCOL, `r.${ROOM}`, "c.3600", `o.${OWNER}`, "w.12-345-6-1295"]);
+    new RelayConnection({ roomId: ROOM }, () => {});
     expect(FakeSocket.last.protocols).toEqual([SUBPROTOCOL, `r.${ROOM}`]);
+    // words only ever ride along with a create
+    expect(relayProtocols({ roomId: ROOM, words: "1-2-3-4" })).toEqual([SUBPROTOCOL, `r.${ROOM}`]);
+    new RelayConnection({ knock: "1-2-3-4" }, () => {});
+    expect(FakeSocket.last.protocols).toEqual([SUBPROTOCOL, "w.1-2-3-4"]);
     // RFC 7230 tchar: what browsers accept in Sec-WebSocket-Protocol
     const tchar = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
-    for (const p of relayProtocols(ROOM, 86400, OWNER)) expect(p).toMatch(tchar);
+    for (const p of relayProtocols({ roomId: ROOM, create: 86400, owner: OWNER, words: "1295-0-7-99" })) expect(p).toMatch(tchar);
+    for (const p of relayProtocols({ knock: "1295-0-7-99" })) expect(p).toMatch(tchar);
   });
 
   it("reports a socket that never opened as unreachable, and a lost one as closed", () => {
     const events: RelayEvent[] = [];
-    new RelayConnection(ROOM, undefined, undefined, (e) => events.push(e));
+    new RelayConnection({ roomId: ROOM }, (e) => events.push(e));
     FakeSocket.last.onclose!({ code: 1006 });
     expect(events).toEqual([{ type: "unreachable" }]);
 
     events.length = 0;
-    new RelayConnection(ROOM, undefined, undefined, (e) => events.push(e));
+    new RelayConnection({ roomId: ROOM }, (e) => events.push(e));
     const ws = FakeSocket.last;
     ws.readyState = FakeSocket.OPEN;
     ws.onopen!();
@@ -67,7 +72,7 @@ describe("RelayConnection transport", () => {
   });
 
   it("sendRaw sends a pre-built frame synchronously, only while open", () => {
-    const conn = new RelayConnection(ROOM, undefined, undefined, () => {});
+    const conn = new RelayConnection({ roomId: ROOM }, () => {});
     const ws = FakeSocket.last;
     expect(conn.sendRaw('{"t":"ping"}')).toBe(false);
     expect(ws.sent).toEqual([]);

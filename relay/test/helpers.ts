@@ -1,6 +1,6 @@
 import { env, runInDurableObject } from "cloudflare:test";
 import { exports } from "cloudflare:workers";
-import { type ServerFrame, SUBPROTOCOL, WS_PATH } from "../src/protocol";
+import { CT_CHARS, type ServerFrame, SUBPROTOCOL, WS_PATH } from "../src/protocol";
 
 export const ORIGIN = "http://localhost:5173";
 
@@ -22,6 +22,8 @@ export type Conn = {
 type ConnectOpts = {
   create?: number | string;
   owner?: string;
+  /** 4 words as indices, e.g. "1-2-3-4"; registered on a create */
+  words?: string;
   origin?: string | null;
   /** client address; defaults to a fresh random one per call, so the per-IP limits only bite where a test means them to */
   ip?: string;
@@ -31,11 +33,22 @@ type ConnectOpts = {
 };
 
 /** the subprotocol offer a browser client sends: melty.v1, r.<roomId>[, c.<ttl>][, o.<hash>] */
-export function offer(roomId: string, opts: { create?: number | string; owner?: string } = {}): string {
+export function offer(roomId: string, opts: { create?: number | string; owner?: string; words?: string } = {}): string {
   const parts = [SUBPROTOCOL, `r.${roomId}`];
   if (opts.create !== undefined) parts.push(`c.${opts.create}`);
   if (opts.owner !== undefined) parts.push(`o.${opts.owner}`);
+  if (opts.words !== undefined) parts.push(`w.${opts.words}`);
   return parts.join(", ");
+}
+
+/** knock with 4 words: what a browser sends when someone types the words */
+export function knock(words: string, opts: ConnectOpts = {}): Promise<Conn> {
+  return connect("", { ...opts, protocol: `${SUBPROTOCOL}, w.${words}` });
+}
+
+/** random, so tests don't collide on the same door */
+export function randomWords(): string {
+  return Array.from(crypto.getRandomValues(new Uint16Array(4)), (n) => n % 1296).join("-");
 }
 
 export async function connect(roomId: string, opts: ConnectOpts = {}): Promise<Conn> {
@@ -94,8 +107,8 @@ export function setStored(roomId: string, key: string, value: number): Promise<v
   return runInDurableObject(roomStub(roomId), (_i, state) => state.storage.put(key, value));
 }
 
-/** a well-formed frame; the relay can't tell it apart from real ciphertext */
-export function fakeMsg(ctChars = 64) {
+/** a well-formed frame (padded to the smallest size); the relay can't tell it apart from real ciphertext */
+export function fakeMsg(ctChars = CT_CHARS[0]!) {
   return { t: "msg", iv: "A".repeat(16), ct: "B".repeat(ctChars) };
 }
 

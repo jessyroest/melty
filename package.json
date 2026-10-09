@@ -14,6 +14,7 @@
     "e2e:features": "node scripts/e2e-features.mjs",
     "e2e:xss": "node scripts/e2e-xss.mjs",
     "e2e:resilience": "node scripts/e2e-resilience.mjs",
+    "e2e:phase2": "node scripts/e2e-phase2.mjs",
     "deploy:share": "node scripts/deploy-share.mjs",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm check:bundle && pnpm check:logs"
   },

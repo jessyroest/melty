@@ -1,7 +1,24 @@
-import { type ClientFrame, type ErrorCode, RATE_BURST, RATE_PER_SEC, type Ttl } from "@relay/protocol";
+import { type ClientFrame, type ErrorCode, MAX_LOBBY, RATE_BURST, RATE_PER_SEC, type Ttl } from "@relay/protocol";
 import { useSyncExternalStore } from "react";
-import { open, seal } from "../crypto/aead";
-import { deriveRoom, newSecret, type RoomKeys, SECRET_BYTES } from "../crypto/derive";
+import type { Sealed } from "../crypto/aead";
+import { deriveLink, importRoomKey, type LinkKeys, newSecret, ROOM_KEY_BYTES, type RoomKeys, SECRET_BYTES } from "../crypto/derive";
+import { LEAVE_COUNTER, newSenderId, openMsg, ReplayGuard, sealMsg } from "../crypto/frame";
+import {
+  decodeKx,
+  encodeKx,
+  hostAccept,
+  type HostKeys,
+  hostKeys,
+  joinerAnswer,
+  type KxMode,
+  type KxMsg,
+  type KxResult,
+  newHandshakeId,
+  openBundle,
+  safetyCode,
+  sealBundle,
+  wipeHost,
+} from "../crypto/kx";
 import {
   cleanNick,
   decodeInner,
@@ -14,7 +31,8 @@ import {
 import { type Bytes, fromB64url, toB64url } from "../lib/b64url";
 import { randomNick } from "../lib/nick";
 import { navigate } from "../lib/router";
-import { RelayConnection, type RelayEvent } from "../net/relay";
+import { codeToWire, codeWords, type DoorCode, newDoorCode } from "../crypto/words";
+import { RelayConnection, type RelayEvent, type Target } from "../net/relay";
 import { anchorClock, nextRetry, type ServerClock, serverTime } from "./resilience";
 
 export type Line = {
@@ -36,7 +54,31 @@ export type Line = {
   melting?: boolean;
   reactions?: Partial<Record<Reaction, string[]>>;
 };
-export type Status = "connecting" | "live" | "reconnecting";
+/**
+ * `waiting`: in the room (came with the link), waiting for someone inside to hand over the key.
+ * `knocking`: at the door with the 4 words, waiting for someone inside to let you in.
+ */
+export type Status = "connecting" | "live" | "reconnecting" | "waiting" | "knocking";
+
+/** how this tab got into the room */
+export type Entry = "create" | "link" | "code";
+
+/** someone at the door with the 4 words, waiting for a person inside to answer */
+export type Knock = { hs: string; at: number };
+
+/**
+ * A safety code to compare outside the app: 6 words from the key exchange's transcript.
+ * If someone sat in the middle of the exchange, the two sides see different words.
+ */
+export type SafetyCheck = {
+  hs: string;
+  /** "joiner": you were let in by `peer`. "host": you let `peer` in. */
+  role: "joiner" | "host";
+  /** their nickname, as they call themselves (unverified, like every nick) */
+  peer: string | null;
+  words: string[];
+  state: "open" | "match" | "mismatch";
+};
 
 export type View = {
   status: Status;
@@ -58,6 +100,13 @@ export type View = {
   typing: string[];
   /** the creator has closed the door: nobody new can join */
   locked: boolean;
+  entry: Entry;
+  /** the room's 4 words, once this tab knows them */
+  words: string[] | null;
+  /** people knocking with the 4 words; anyone inside can let them in */
+  knocks: Knock[];
+  /** safety codes from the key exchanges this tab took part in with the 4 words */
+  checks: SafetyCheck[];
 };
 
 /**
@@ -74,7 +123,13 @@ export type RoomErrorKind =
   | "limit"
   | "slow"
   | "unreachable"
-  | "lost";
+  | "lost"
+  /** nobody inside handed over the key (or let you in); the link or words are kept for "try again" */
+  | "nobody"
+  /** someone inside turned the knock down */
+  | "turned_away"
+  /** you said the safety code didn't match */
+  | "mismatch";
 
 export const MELTED = "that room melted. everything's gone.";
 export const MELTED_BY_CREATOR = "the creator melted the room.";
@@ -91,6 +146,12 @@ export const NOTICES = {
   limit: "too many new rooms from your network. try again in a while.",
   slow: "too many connection attempts from your network.",
   lost: "the connection was gone for too long, so this tab let the room go.",
+  noWords: "no room answers to those words. check them, or the room may have melted.",
+  lobbyFull: "a few people are already knocking. try again in a minute.",
+  nobodyLink: "nobody inside handed over the key. someone has to be in the room to let you in.",
+  nobodyWords: "nobody let you in. someone inside has to say yes.",
+  turnedAway: "someone inside said no.",
+  mismatch: "you said the safety words didn't match, so this tab left. someone may have been in the middle.",
 } as const;
 
 /** burn-after-read: how long a message stays readable */
@@ -105,9 +166,33 @@ const TICK_MS = 5000;
 const RESEAL_MS = 60_000;
 /** after "slow" from the relay, reconnect at the slowest pace */
 const SLOW_ATTEMPT = 8;
+/** link join: ask for the key again if nobody answered within this, a few times */
+const LINK_WAIT_MS = 8000;
+const LINK_TRIES = 3;
+/** knock: give up waiting to be let in after this (the relay closes the lobby socket at 3 min) */
+export const KNOCK_WAIT_MS = 150_000;
+/** host: a handshake that doesn't finish in this time is dropped */
+const HOST_WAIT_MS = 60_000;
+/** link joins are answered automatically: the creator at once, others a moment later unless someone did */
+const ANSWER_DELAY_MS = [1200, 2500] as const;
+/** messages that arrive before this tab has the key: kept encrypted until it does */
+const MAX_PENDING = 64;
+/** a create whose words are taken tries fresh words this many times */
+const WORD_TRIES = 3;
 
 /** the creator's proof: a random secret kept in memory, and the hash the relay gets */
 type Owner = { secret: Bytes; hash: string };
+
+/** a handshake this tab is hosting (handing the room key to someone) */
+type Hosting = { tag: string; hs: Bytes; mode: KxMode; keys: HostKeys; timer: ReturnType<typeof setTimeout> };
+/** the handshake this tab is joining through */
+type Joining = { hs: Bytes; mode: KxMode; result: KxResult | null; host: string | null };
+
+/** what a tab starts with: the creator has everything; a link joiner the link; a knocker only the words */
+type Init =
+  | { entry: "create"; link: Bytes; roomKey: Bytes; link_: LinkKeys; key: CryptoKey; code: DoorCode; owner: Owner; ttl: Ttl }
+  | { entry: "link"; link: Bytes; link_: LinkKeys }
+  | { entry: "code"; code: DoorCode };
 
 /**
  * Everything about the current room lives here, in memory only: the secret,
@@ -115,16 +200,24 @@ type Owner = { secret: Bytes; hash: string };
  */
 export class Session {
   view: View;
-  private secret: Bytes | null;
+  /** the link secret: the room id and the link's psk come from it */
+  private link: Bytes | null;
+  private linkKeys: LinkKeys | null;
+  /** raw room key, kept only to hand to newcomers through the key exchange */
+  private roomKey: Bytes | null;
   private keys: RoomKeys | null;
+  private code: DoorCode | null;
   private owner: Owner | null;
   private conn: RelayConnection | null = null;
   /** bumped per connection, so a stale socket's events are ignored */
   private connSeq = 0;
+  /** this socket's tag at the relay, for key-exchange frames */
+  private tag: string | null = null;
   /** the ttl to create the room with, until the relay has said hello once */
   private createTtl: Ttl | undefined;
+  private wordTries = 0;
   private everLive = false;
-  /** relay never answered before the first hello: waiting for "try again", key still here */
+  /** waiting for "try again" (relay unreachable, or nobody let us in); what we came with is still here */
   private paused = false;
   private attempt = 0;
   /** performance.now() when the connection was lost, for the offline cap */
@@ -140,6 +233,24 @@ export class Session {
   private leaveSealedAt = -Infinity;
   private nextId = 1;
   private lastTyping = 0;
+  /** replay protection: our sender id and counter, and what we've seen from the others */
+  private sender = newSenderId();
+  private counter = 0;
+  private guard = new ReplayGuard();
+  /** room messages that came in before we had the key, still encrypted */
+  private pending: Sealed[] = [];
+  /** key exchange */
+  private joining: Joining | null = null;
+  private joinTries = 0;
+  /** the handshake that let us in, mentioned in our join notice */
+  private joinedVia: string | null = null;
+  private hosting = new Map<string, Hosting>();
+  /** link joins we'll answer in a moment, unless someone else does first */
+  private answerTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** knocks waiting for a yes or no: hs → the knocker's tag */
+  private knockers = new Map<string, { tag: string; hs: Bytes; timer: ReturnType<typeof setTimeout> }>();
+  /** handshakes someone else inside is already handling */
+  private handled = new Set<string>();
   /**
    * The relay allows RATE_BURST frames, refilled at RATE_PER_SEC, per connection, and silently
    * drops the rest. Mirror that here (a little more strictly), so a message is refused up front,
@@ -153,14 +264,18 @@ export class Session {
   private hintTimer: ReturnType<typeof setTimeout> | undefined;
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
   private tickTimer: ReturnType<typeof setInterval> | undefined;
+  private kxTimer: ReturnType<typeof setTimeout> | undefined;
   private typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private burnTimers = new Set<ReturnType<typeof setTimeout>>();
 
-  constructor(secret: Bytes, keys: RoomKeys, owner: Owner | null, create?: Ttl) {
-    this.secret = secret;
-    this.keys = keys;
-    this.owner = owner;
-    this.createTtl = create;
+  constructor(init: Init) {
+    this.link = init.entry === "code" ? null : init.link;
+    this.linkKeys = init.entry === "code" ? null : init.link_;
+    this.roomKey = init.entry === "create" ? init.roomKey : null;
+    this.keys = init.entry === "create" ? { ...init.link_, key: init.key } : null;
+    this.code = init.entry === "link" ? null : init.code;
+    this.owner = init.entry === "create" ? init.owner : null;
+    this.createTtl = init.entry === "create" ? init.ttl : undefined;
     this.view = {
       status: "connecting",
       lines: [],
@@ -169,21 +284,38 @@ export class Session {
       ttlMs: null,
       offset: 0,
       nick: randomNick(),
-      isCreator: owner !== null,
+      isCreator: init.entry === "create",
       hint: null,
       typing: [],
       locked: false,
+      entry: init.entry,
+      words: this.code ? codeWords(this.code) : null,
+      knocks: [],
+      checks: [],
     };
   }
 
   connect(): void {
-    if (!this.keys || this.ended || this.paused) return;
+    if (this.ended || this.paused) return;
     clearTimeout(this.retryTimer);
     this.retryTimer = undefined;
     this.conn?.close();
     this.conn = null;
+    this.tag = null;
+    let target: Target;
+    if (this.linkKeys) {
+      const create = this.everLive ? undefined : this.createTtl;
+      target = {
+        roomId: this.linkKeys.roomId,
+        create,
+        owner: this.owner?.hash,
+        words: create && this.code ? codeToWire(this.code) : undefined,
+      };
+    } else if (this.code) {
+      target = { knock: codeToWire(this.code) };
+    } else return;
     const seq = ++this.connSeq;
-    const conn = new RelayConnection(this.keys.roomId, this.everLive ? undefined : this.createTtl, this.owner?.hash, (e) => {
+    const conn = new RelayConnection(target, (e) => {
       if (seq !== this.connSeq) return;
       // lifecycle events can come from inside the constructor (a socket that can't even be built)
       if (e.type === "closed" || e.type === "unreachable") queueMicrotask(() => seq === this.connSeq && this.onLost());
@@ -197,8 +329,44 @@ export class Session {
     return this.clock ? serverTime(this.clock, performance.now()) : Date.now() + this.view.offset;
   }
 
+  /** the link to share; only once this tab is a member (a knocker doesn't have it yet) */
   shareLink(): string | null {
-    return this.secret ? `${location.origin}/r#${toB64url(this.secret)}` : null;
+    return this.link && this.keys ? `${location.origin}/r#${toB64url(this.link)}` : null;
+  }
+
+  /** a person inside said yes to a knock: run the key exchange with them */
+  letIn(hs: string): void {
+    const k = this.knockers.get(hs);
+    this.dropKnock(hs);
+    if (!k || this.handled.has(hs) || !this.canHost()) return;
+    this.host(k.tag, k.hs, "code");
+  }
+
+  /** a person inside said no */
+  turnAway(hs: string): void {
+    const k = this.knockers.get(hs);
+    this.dropKnock(hs);
+    if (!k || !this.conn) return;
+    this.sendKx(k.tag, { k: "no", hs: k.hs });
+    void this.transmit({ v: 1, kind: "door", nick: this.view.nick, hs, act: "no", ts: Date.now() }).catch(() => false);
+  }
+
+  /** the two sides compared the safety words */
+  confirmCheck(hs: string, match: boolean): void {
+    const c = this.view.checks.find((x) => x.hs === hs);
+    if (!c || c.state !== "open") return;
+    this.update({ checks: this.view.checks.map((x) => (x.hs === hs ? { ...x, state: match ? "match" : "mismatch" } : x)) });
+    if (match) return;
+    if (c.role === "joiner") return this.end(NOTICES.mismatch, "mismatch");
+    this.push({
+      kind: "system",
+      mine: true,
+      nick: "",
+      text: this.owner
+        ? "the safety words didn't match. someone may be in the middle. melt the room and start over."
+        : "the safety words didn't match. someone may be in the middle. leave, and tell the others.",
+      ts: Date.now(),
+    });
   }
 
   async send(raw: string, opts: { burn?: boolean } = {}): Promise<boolean> {
@@ -315,14 +483,15 @@ export class Session {
     }
   }
 
-  /** the relay never answered: "try again" with the key that is still in memory */
+  /** "try again": the relay never answered, or nobody let us in. What we came with is still in memory. */
   retry(): void {
     if (this.ended || !this.paused) return;
     this.paused = false;
     this.attempt = 0;
+    this.joinTries = 0;
     this.lostAt = null;
     if (store.session === this) store = { ...store, error: null, notice: null };
-    this.update({ status: this.everLive ? "reconnecting" : "connecting" });
+    this.update({ status: this.everLive && this.keys ? "reconnecting" : "connecting" });
     this.connect();
   }
 
@@ -349,11 +518,31 @@ export class Session {
   }
 
   private wipe(): void {
-    this.secret?.fill(0);
-    this.secret = null;
+    this.link?.fill(0);
+    this.link = null;
+    this.roomKey?.fill(0);
+    this.roomKey = null;
+    this.linkKeys?.psk.fill(0);
+    this.linkKeys = null;
     this.owner?.secret.fill(0);
     this.owner = null;
     this.keys = null;
+    this.code = null;
+    this.joining?.result?.bundleKey.fill(0);
+    this.joining = null;
+    for (const h of this.hosting.values()) {
+      wipeHost(h.keys);
+      clearTimeout(h.timer);
+    }
+    this.hosting.clear();
+    this.answerTimers.forEach(clearTimeout);
+    this.answerTimers.clear();
+    for (const k of this.knockers.values()) clearTimeout(k.timer);
+    this.knockers.clear();
+    this.handled.clear();
+    this.pending = [];
+    this.guard.clear();
+    clearTimeout(this.kxTimer);
     this.leaveFrame = null;
     this.leaveSeq++;
     this.clock = null;
@@ -370,7 +559,7 @@ export class Session {
     this.typingTimers.clear();
     this.burnTimers.forEach(clearTimeout);
     this.burnTimers.clear();
-    this.view = { ...this.view, lines: [], nick: "", hint: null, typing: [] };
+    this.view = { ...this.view, lines: [], nick: "", hint: null, typing: [], words: null, knocks: [], checks: [] };
   }
 
   private hasTokens(n: number): boolean {
@@ -392,8 +581,16 @@ export class Session {
       return false;
     }
     this.tokens -= 1;
-    const sealed = await seal(this.keys.key, this.keys.aad, encodeInner(m));
+    // the counter is taken before the await, so two sends in flight never share one
+    const sealed = await sealMsg(this.keys.key, this.keys.aad, this.sender, this.counter++, encodeInner(m));
     return this.conn?.send(sealed) ?? false;
+  }
+
+  /** key-exchange frames count against the relay's rate limit too */
+  private sendKx(to: string | undefined, m: KxMsg): boolean {
+    this.hasTokens(0);
+    this.tokens = Math.max(0, this.tokens - 1);
+    return this.conn?.sendKx(to, encodeKx(m)) ?? false;
   }
 
   /** keep one encrypted goodbye ready, so leaving (and pagehide) can send it without awaiting */
@@ -403,7 +600,9 @@ export class Session {
     const seq = ++this.leaveSeq;
     this.leaveSealedAt = performance.now();
     try {
-      const sealed = await seal(keys.key, keys.aad, encodeInner({ v: 1, kind: "leave", nick: this.view.nick, ts: Date.now() }));
+      const inner = encodeInner({ v: 1, kind: "leave", nick: this.view.nick, ts: Date.now() });
+      // always the last thing we send, so it takes the highest counter there is
+      const sealed = await sealMsg(keys.key, keys.aad, this.sender, LEAVE_COUNTER, inner);
       if (seq !== this.leaveSeq || this.ended) return;
       const frame: ClientFrame = { t: "msg", iv: sealed.iv, ct: sealed.ct };
       this.leaveFrame = JSON.stringify(frame);
@@ -417,12 +616,12 @@ export class Session {
     switch (e.type) {
       case "hello": {
         this.clock = anchorClock(e.now, performance.now());
+        this.tag = e.tag;
         this.everLive = true;
         this.createTtl = undefined;
         this.attempt = 0;
         this.lostAt = null;
         this.update({
-          status: "live",
           n: e.n,
           expiresAt: e.expiresAt,
           ttlMs: e.ttl * 1000,
@@ -431,22 +630,20 @@ export class Session {
         });
         this.scheduleExpiry();
         this.startTick();
-        void this.resealLeave();
-        if (!this.joined) {
-          // only once per room: a reconnect never repeats the join notice
-          const nick = this.view.nick;
-          this.joined = await this.transmit({ v: 1, kind: "join", nick, ts: Date.now() }).catch(() => false);
-          if (this.joined) this.announcedNick = nick;
-        } else if (this.announcedNick !== null && this.announcedNick !== this.view.nick) {
-          // renamed while offline: the others never heard it
-          const nick = this.view.nick;
-          const sent = await this.transmit({ v: 1, kind: "nick", nick, prev: this.announcedNick, ts: Date.now() }).catch(
-            () => false,
-          );
-          if (sent) this.announcedNick = nick;
+        if (e.lobby) {
+          this.update({ status: "knocking" });
+          return this.startJoin("code");
         }
-        return;
+        if (!this.keys) {
+          this.update({ status: "waiting" });
+          // just us in here: nobody can hand over the key
+          if (e.n <= 1) return this.pause("nobody", NOTICES.nobodyLink);
+          return this.startJoin("link");
+        }
+        return this.goLive();
       }
+      case "kx":
+        return this.onKx(e.from, e.d);
       case "presence":
         return this.update({ n: e.n });
       case "locked":
@@ -472,21 +669,221 @@ export class Session {
     }
   }
 
+  /** connected and holding the key: announce ourselves, catch up on what arrived before the key */
+  private async goLive(): Promise<void> {
+    this.update({ status: "live" });
+    void this.resealLeave();
+    const early = this.pending;
+    this.pending = [];
+    for (const s of early) await this.receive(s);
+    if (this.ended) return;
+    if (!this.joined) {
+      // only once per room: a reconnect never repeats the join notice
+      const nick = this.view.nick;
+      const m: Inner = { v: 1, kind: "join", nick, ts: Date.now(), ...(this.joinedVia ? { hs: this.joinedVia } : {}) };
+      this.joined = await this.transmit(m).catch(() => false);
+      if (this.joined) this.announcedNick = nick;
+    } else if (this.announcedNick !== null && this.announcedNick !== this.view.nick) {
+      // renamed while offline: the others never heard it
+      const nick = this.view.nick;
+      const sent = await this.transmit({ v: 1, kind: "nick", nick, prev: this.announcedNick, ts: Date.now() }).catch(
+        () => false,
+      );
+      if (sent) this.announcedNick = nick;
+    }
+  }
+
+  // ---- key exchange: joining ------------------------------------------------
+
+  /** ask the people inside for the key (link) or to be let in (words) */
+  private startJoin(mode: KxMode): void {
+    clearTimeout(this.kxTimer);
+    this.joining?.result?.bundleKey.fill(0);
+    const hs = newHandshakeId();
+    this.joining = { hs, mode, result: null, host: null };
+    this.sendKx(undefined, { k: "req", hs, mode });
+    this.kxTimer = setTimeout(() => this.joinTimedOut(), mode === "link" ? LINK_WAIT_MS : KNOCK_WAIT_MS);
+  }
+
+  private joinTimedOut(): void {
+    if (this.ended || this.keys || !this.joining) return;
+    if (this.joining.mode === "link" && ++this.joinTries < LINK_TRIES) return this.startJoin("link");
+    this.pause("nobody", this.joining.mode === "link" ? NOTICES.nobodyLink : NOTICES.nobodyWords);
+  }
+
+  private onKx(from: string, d: string): void {
+    const m = decodeKx(d);
+    if (!m || this.ended) return;
+    switch (m.k) {
+      case "req":
+        return this.onRequest(from, m);
+      case "offer":
+        return this.onOffer(from, m);
+      case "ans":
+        return void this.onAnswer(from, m);
+      case "key":
+        return void this.onKey(from, m);
+      case "no":
+        if (this.joining?.mode === "code" && sameId(this.joining.hs, m.hs) && !this.keys) {
+          return this.end(NOTICES.turnedAway, "turned_away");
+        }
+        return;
+    }
+  }
+
+  private onOffer(from: string, m: Extract<KxMsg, { k: "offer" }>): void {
+    const j = this.joining;
+    // the first offer wins; the rest are ignored
+    if (!j || j.result || !sameId(j.hs, m.hs)) return;
+    const psk = j.mode === "link" ? (this.linkKeys?.psk ?? null) : null;
+    if (j.mode === "link" && !psk) return;
+    const r = joinerAnswer(j.mode, j.hs, m, psk);
+    if (!r) return;
+    j.result = r.result;
+    j.host = from;
+    this.sendKx(from, r.ans);
+  }
+
+  private async onKey(from: string, m: Extract<KxMsg, { k: "key" }>): Promise<void> {
+    const j = this.joining;
+    if (!j?.result || j.host !== from || !sameId(j.hs, m.hs) || this.keys) return;
+    let link: LinkKeys;
+    let bundle;
+    try {
+      bundle = await openBundle(j.result, m);
+      link = await deriveLink(bundle.link);
+    } catch {
+      return; // not sealed for this handshake: someone in the middle, or junk
+    }
+    // a link join must end up in the room it came to
+    if (this.ended || this.joining !== j || (this.linkKeys && link.roomId !== this.linkKeys.roomId)) return;
+    const key = await importRoomKey(bundle.key);
+    if (this.ended || this.joining !== j) return;
+
+    clearTimeout(this.kxTimer);
+    const hs = toB64url(j.hs);
+    const th = j.result.th;
+    j.result.bundleKey.fill(0);
+    this.joining = null;
+    this.linkKeys?.psk.fill(0);
+    this.link = bundle.link;
+    this.linkKeys = link;
+    this.roomKey = bundle.key;
+    this.keys = { ...link, key };
+    this.code = bundle.code ?? this.code;
+    this.joinedVia = hs;
+    this.update({ words: this.code ? codeWords(this.code) : null });
+
+    if (j.mode === "code") {
+      this.update({
+        checks: [...this.view.checks, { hs, role: "joiner", peer: bundle.host || null, words: safetyCode(th), state: "open" }],
+        status: "connecting",
+      });
+      // from the lobby into the room itself
+      this.connect();
+      return;
+    }
+    await this.goLive();
+  }
+
+  // ---- key exchange: hosting ------------------------------------------------
+
+  private canHost(): boolean {
+    return !this.ended && this.keys !== null && this.roomKey !== null && this.link !== null && this.view.status === "live";
+  }
+
+  private onRequest(from: string, m: Extract<KxMsg, { k: "req" }>): void {
+    const hs = toB64url(m.hs);
+    if (!this.canHost() || this.handled.has(hs) || this.hosting.has(hs) || this.answerTimers.has(hs) || this.knockers.has(hs)) {
+      return;
+    }
+    if (m.mode === "link") {
+      // anyone holding the link can get the key; the psk in the exchange proves they hold it
+      const [lo, hi] = ANSWER_DELAY_MS;
+      const delay = this.owner ? 0 : lo + Math.random() * (hi - lo);
+      this.answerTimers.set(
+        hs,
+        setTimeout(() => {
+          this.answerTimers.delete(hs);
+          if (!this.handled.has(hs) && this.canHost()) this.host(from, m.hs, "link");
+        }, delay),
+      );
+      return;
+    }
+    // with the words, a person inside decides
+    if (this.knockers.size >= MAX_LOBBY) return;
+    const timer = setTimeout(() => this.dropKnock(hs), KNOCK_WAIT_MS);
+    this.knockers.set(hs, { tag: from, hs: m.hs, timer });
+    this.update({ knocks: [...this.view.knocks, { hs, at: Date.now() }] });
+  }
+
+  private dropKnock(hs: string): void {
+    const k = this.knockers.get(hs);
+    if (k) clearTimeout(k.timer);
+    this.knockers.delete(hs);
+    if (this.view.knocks.some((x) => x.hs === hs)) this.update({ knocks: this.view.knocks.filter((x) => x.hs !== hs) });
+  }
+
+  /** send an offer with fresh keys, and tell the others we've got this one */
+  private host(tag: string, hsBytes: Bytes, mode: KxMode): void {
+    const hs = toB64url(hsBytes);
+    const keys = hostKeys();
+    const timer = setTimeout(() => {
+      const h = this.hosting.get(hs);
+      if (h) wipeHost(h.keys);
+      this.hosting.delete(hs);
+    }, HOST_WAIT_MS);
+    this.hosting.set(hs, { tag, hs: hsBytes, mode, keys, timer });
+    this.handled.add(hs);
+    this.sendKx(tag, { k: "offer", hs: hsBytes, x: keys.xPk, m: keys.mPk });
+    void this.transmit({ v: 1, kind: "door", nick: this.view.nick, hs, act: "in", ts: Date.now() }).catch(() => false);
+  }
+
+  private async onAnswer(from: string, m: Extract<KxMsg, { k: "ans" }>): Promise<void> {
+    const hs = toB64url(m.hs);
+    const h = this.hosting.get(hs);
+    if (!h || h.tag !== from) return;
+    this.hosting.delete(hs);
+    clearTimeout(h.timer);
+    const psk = h.mode === "link" ? (this.linkKeys?.psk ?? null) : null;
+    const r = psk || h.mode === "code" ? hostAccept(h.mode, h.hs, h.keys, m, psk) : null;
+    wipeHost(h.keys);
+    // a wrong MAC: they don't have the link
+    if (!r || !this.canHost()) return;
+    const sealed = await sealBundle(r, h.hs, { key: this.roomKey!, link: this.link!, code: this.code, host: this.view.nick });
+    r.bundleKey.fill(0);
+    if (this.ended) return;
+    this.sendKx(from, sealed);
+    if (h.mode === "code") {
+      this.update({ checks: [...this.view.checks, { hs, role: "host", peer: null, words: safetyCode(r.th), state: "open" }] });
+    }
+  }
+
   private onError(code: ErrorCode): void {
     switch (code) {
       case "not_found":
+        return this.end(this.view.entry === "code" && !this.keys ? NOTICES.noWords : NOTICES.not_found, "not_found");
+      case "taken":
+        // our fresh words point to another live room (or, vanishingly unlikely, the room id does): new words
+        if (this.view.entry === "create" && !this.joined && ++this.wordTries <= WORD_TRIES) {
+          this.code = newDoorCode();
+          this.everLive = false;
+          this.update({ words: codeWords(this.code) });
+          this.retryTimer = setTimeout(() => this.connect(), 50);
+          return;
+        }
         return this.end(NOTICES.not_found, "not_found");
       case "gone":
         return this.end(this.everLive ? NOTICES.goneWhileAway : NOTICES.gone, "expired");
       case "full":
-        return this.end(NOTICES.full, "full");
+        return this.end(this.view.entry === "code" && !this.keys ? NOTICES.lobbyFull : NOTICES.full, "full");
       case "locked":
         return this.end(NOTICES.locked, "locked");
       case "limit":
         return this.end(NOTICES.limit, "limit");
       case "slow":
         // mid-room: back off to the slowest pace, the close that follows retries
-        if (this.everLive) {
+        if (this.everLive && this.keys) {
           this.attempt = Math.max(this.attempt, SLOW_ATTEMPT);
           return;
         }
@@ -512,6 +909,10 @@ export class Session {
    */
   private onLost(): void {
     if (this.ended || this.paused) return;
+    // a socket closed mid-exchange: the next hello starts a fresh one
+    clearTimeout(this.kxTimer);
+    this.joining?.result?.bundleKey.fill(0);
+    this.joining = null;
     this.connSeq++;
     this.conn?.close();
     this.conn = null;
@@ -532,14 +933,23 @@ export class Session {
       return this.pause();
     }
     this.attempt++;
-    if (this.everLive && this.view.status !== "reconnecting") this.update({ status: "reconnecting" });
+    if (this.everLive && this.keys && this.view.status !== "reconnecting") this.update({ status: "reconnecting" });
     this.retryTimer = setTimeout(() => this.connect(), d.delayMs);
   }
 
-  private pause(): void {
+  /** stop and wait for "try again", keeping what we came with (link, words, key) in memory */
+  private pause(kind: "unreachable" | "nobody" = "unreachable", notice: string | null = null): void {
     this.paused = true;
+    clearTimeout(this.kxTimer);
+    clearTimeout(this.retryTimer);
+    this.retryTimer = undefined;
+    this.joining?.result?.bundleKey.fill(0);
+    this.joining = null;
+    this.connSeq++;
+    this.conn?.close();
+    this.conn = null;
     if (store.session === this) {
-      store = { ...store, notice: null, error: "unreachable" };
+      store = { ...store, notice, error: kind };
       emit();
     }
   }
@@ -561,11 +971,18 @@ export class Session {
     if (this.view.status === "live" && performance.now() - this.leaveSealedAt >= RESEAL_MS) void this.resealLeave();
   }
 
-  private async receive(sealed: { iv: string; ct: string }): Promise<void> {
-    if (!this.keys) return;
+  private async receive(sealed: Sealed): Promise<void> {
+    if (!this.keys) {
+      // not let in yet: keep it (encrypted) until we have the key
+      if (this.pending.length < MAX_PENDING) this.pending.push(sealed);
+      return;
+    }
     let m: Inner | null;
     try {
-      m = decodeInner(await open(this.keys.key, this.keys.aad, sealed));
+      const o = await openMsg(this.keys.key, this.keys.aad, sealed);
+      // a replayed frame: already seen this sender's counter
+      if (!this.guard.accept(o.sender, o.counter)) return;
+      m = decodeInner(o.plaintext);
     } catch {
       return; // not for us, or tampered with: drop silently
     }
@@ -591,9 +1008,23 @@ export class Session {
         if (line) this.patchLine(line.id, { reactions: toggle(line.reactions, m.emoji, m.nick, m.on) });
         return;
       }
-      case "join":
+      case "join": {
         this.push({ kind: "system", mine: false, nick: m.nick, text: `${m.nick} joined`, ts: m.ts });
+        // put a name to the safety code of the person we let in
+        const hs = m.hs;
+        if (hs && this.view.checks.some((c) => c.hs === hs && c.role === "host")) {
+          this.update({ checks: this.view.checks.map((c) => (c.hs === hs ? { ...c, peer: m.nick } : c)) });
+        }
         return;
+      }
+      case "door": {
+        // someone else inside has this one: don't answer it too
+        this.handled.add(m.hs);
+        clearTimeout(this.answerTimers.get(m.hs));
+        this.answerTimers.delete(m.hs);
+        this.dropKnock(m.hs);
+        return;
+      }
       case "leave":
         this.stopTyping(m.nick);
         this.push({ kind: "system", mine: false, nick: m.nick, text: `${m.nick} left`, ts: m.ts });
@@ -718,28 +1149,49 @@ function replace(next: Session | null, notice: string | null = null): void {
 }
 
 export async function createRoom(ttl: Ttl): Promise<void> {
-  const secret = newSecret();
+  const link = newSecret();
+  const roomKey = crypto.getRandomValues(new Uint8Array(ROOM_KEY_BYTES));
   const ownerSecret = crypto.getRandomValues(new Uint8Array(32));
   const hash = toB64url(new Uint8Array(await crypto.subtle.digest("SHA-256", ownerSecret)));
-  const s = new Session(secret, await deriveRoom(secret), { secret: ownerSecret, hash }, ttl);
+  const [link_, key] = await Promise.all([deriveLink(link), importRoomKey(roomKey)]);
+  const s = new Session({
+    entry: "create",
+    link,
+    roomKey,
+    link_,
+    key,
+    code: newDoorCode(),
+    owner: { secret: ownerSecret, hash },
+    ttl,
+  });
   replace(s);
   navigate("/r");
   s.connect();
 }
 
-/** Read the secret from a `#fragment`. Returns false if it isn't a valid room link. */
+/**
+ * Read the link secret from a `#fragment`. Returns false if it isn't a valid room link.
+ * The link doesn't carry the room key: someone inside hands it over (see crypto/kx.ts).
+ */
 export async function joinFromFragment(fragment: string): Promise<boolean> {
-  let secret: Bytes;
+  let link: Bytes;
   try {
-    secret = fromB64url(fragment);
+    link = fromB64url(fragment);
   } catch {
     return false;
   }
-  if (secret.length !== SECRET_BYTES) return false;
-  const s = new Session(secret, await deriveRoom(secret), null);
+  if (link.length !== SECRET_BYTES) return false;
+  const s = new Session({ entry: "link", link, link_: await deriveLink(link) });
   replace(s);
   s.connect();
   return true;
+}
+
+/** knock with the room's 4 words */
+export function joinWithWords(code: DoorCode): void {
+  const s = new Session({ entry: "code", code });
+  replace(s);
+  s.connect();
 }
 
 export function setNotice(notice: string | null): void {
@@ -767,6 +1219,10 @@ export function resetToStart(): void {
 /** "try again" on the unreachable screen */
 export function retryRoom(): void {
   store.session?.retry();
+}
+
+function sameId(a: Uint8Array, b: Uint8Array): boolean {
+  return a.length === b.length && a.every((x, i) => x === b[i]);
 }
 
 /** `online` / tab visible again */

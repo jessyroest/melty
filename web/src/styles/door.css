@@ -1,0 +1,164 @@
+/* the door: knocks, safety words, and waiting outside for the key */
+
+.room--door {
+  grid-template-rows: auto auto 1fr auto;
+}
+
+.r-door {
+  display: grid;
+  gap: 8px;
+  max-height: 46vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.r-door__card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--panel-border);
+  background: var(--panel-strong);
+}
+.r-door__card--knock {
+  border-color: var(--warn-border);
+  background: var(--warn-bg);
+}
+.r-door__card--knock strong {
+  color: var(--warn-text);
+}
+.r-door__card--check {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.r-door__text {
+  flex: 1 1 280px;
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+.r-door__text > span {
+  color: var(--muted);
+}
+
+.r-door__words {
+  margin: 2px 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  counter-reset: w;
+}
+.r-door__words li {
+  counter-increment: w;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--bubble-mine);
+  border: 1px solid var(--line);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.r-door__words li::before {
+  content: counter(w);
+  margin-right: 6px;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.r-door__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.r-door__bad {
+  color: var(--danger);
+}
+
+/* waiting outside */
+.r-door-wait {
+  margin: auto;
+  width: min(100%, 520px);
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 28px 22px;
+  text-align: center;
+}
+.r-door-wait h1 {
+  margin: 0;
+  font-size: 1.6rem;
+}
+.r-door-wait h1:focus {
+  outline: none;
+}
+.r-door-wait p {
+  margin: 0;
+  color: var(--muted);
+  max-width: 42ch;
+}
+.r-door-wait__label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+.r-door-wait__words {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+.r-door-wait__words span {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+
+/* the 4 words in the share sheet */
+.r-words {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.r-words__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.r-words__list li {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--panel-border);
+  background: var(--bubble-mine);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.r-words__note {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .r-door-wait .r-hush__halo,
+  .r-door-wait .r-hush__mascot,
+  .r-door-wait .r-hush__dots i {
+    animation: none;
+  }
+}
+
+.room--outside {
+  display: flex;
+  padding: 12px 0;
+}

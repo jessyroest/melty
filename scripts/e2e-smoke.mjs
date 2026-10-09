@@ -19,7 +19,8 @@ const check = (ok, what) => {
   if (!ok) failures.push(what);
 };
 
-const browser = await chromium.launch({ channel });
+// BROWSER_PATH: a Chromium binary instead of an installed channel (e.g. in a container)
+const browser = await chromium.launch(process.env.BROWSER_PATH ? { executablePath: process.env.BROWSER_PATH } : { channel });
 const requests = [];
 const violations = [];
 
@@ -52,7 +53,9 @@ try {
   check(/\/r#[A-Za-z0-9_-]{43}$/.test(link), "creator gets a /r#<43-char secret> link");
   check(new URL(a.page.url()).hash === "", "creator's address bar never shows the secret");
   check(await dialog.getByRole("img", { name: /QR code/ }).isVisible(), "QR code is shown");
-  check(await dialog.getByText("anyone with this link can read along").isVisible(), "share warning is shown");
+  check(await dialog.getByText("anyone with this link gets in while someone's inside").isVisible(), "share warning is shown");
+  const words = await dialog.getByRole("list", { name: "or say these 4 words" }).getByRole("listitem").allTextContents();
+  check(words.length === 4, "the share sheet shows the room's 4 words");
   if (SHOTS) await a.page.screenshot({ path: `${SHOTS}/share.png` });
   await dialog.getByRole("button", { name: "close" }).click();
 

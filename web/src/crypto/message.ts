@@ -7,14 +7,20 @@ export type Reaction = (typeof REACTIONS)[number];
 /** What's inside the ciphertext. System events (join/leave/nick/typing/react) are encrypted too. */
 export type Inner =
   | { v: 1; kind: "chat"; id: string; nick: string; text: string; ts: number; burn?: true }
-  | { v: 1; kind: "join" | "leave" | "typing"; nick: string; ts: number }
+  /** `hs`: the handshake that let this person in, so whoever hosted it can put a name to the safety code */
+  | { v: 1; kind: "join"; nick: string; ts: number; hs?: string }
+  | { v: 1; kind: "leave" | "typing"; nick: string; ts: number }
+  /** someone inside is handling (or turned down) this handshake: the others stand back */
+  | { v: 1; kind: "door"; nick: string; hs: string; act: "in" | "no"; ts: number }
   | { v: 1; kind: "nick"; nick: string; prev: string; ts: number }
   | { v: 1; kind: "react"; nick: string; target: string; emoji: Reaction; on: boolean; ts: number };
 
 export const MAX_NICK = 32;
-const KINDS = new Set(["chat", "join", "leave", "nick", "typing", "react"]);
+const KINDS = new Set(["chat", "join", "leave", "nick", "typing", "react", "door"]);
 /** message ids: 8 random bytes, base64url */
 const MSG_ID = /^[A-Za-z0-9_-]{11}$/;
+/** handshake ids: 16 random bytes, base64url */
+const HS_ID = /^[A-Za-z0-9_-]{22}$/;
 
 const enc = new TextEncoder();
 const dec = new TextDecoder("utf-8", { fatal: true });
@@ -53,6 +59,12 @@ export function decodeInner(b: Uint8Array): Inner | null {
       break;
     case "nick":
       if (!validNick(m.prev)) return null;
+      break;
+    case "join":
+      if (m.hs !== undefined && !(typeof m.hs === "string" && HS_ID.test(m.hs))) return null;
+      break;
+    case "door":
+      if (typeof m.hs !== "string" || !HS_ID.test(m.hs) || (m.act !== "in" && m.act !== "no")) return null;
       break;
     case "react":
       if (!isMsgId(m.target) || typeof m.on !== "boolean") return null;

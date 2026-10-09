@@ -15,6 +15,7 @@ import "./styles/final.css";
 import "./styles/room.css";
 import "./styles/how.css";
 import "./styles/error.css";
+import "./styles/door.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";

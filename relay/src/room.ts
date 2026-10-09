@@ -1,28 +1,50 @@
 import { DurableObject } from "cloudflare:workers";
+import { doorName } from "./door";
 import {
   B64URL_RE,
   CLOSE,
+  CT_CHARS,
   type ErrorCode,
   GONE_MARGIN_MS,
   inferTtl,
+  isErrorCode,
   IV_CHARS,
+  LOBBY_MS,
   MAX_CT_CHARS,
   MAX_FRAME_CHARS,
+  MAX_KX_CHARS,
+  MAX_LOBBY,
   MAX_PARTICIPANTS,
   OWNER_RE,
   RATE_BURST,
   RATE_PER_SEC,
   ROOM_BURST,
   ROOM_RATE_PER_SEC,
+  TAG_RE,
 } from "./protocol";
-import { CREATE_HEADER, OWNER_HEADER, REJECT_HEADER, send, trySend, upgraded } from "./ws";
+import {
+  CREATE_HEADER,
+  LOBBY_HEADER,
+  OWNER_HEADER,
+  REJECT_HEADER,
+  REJECTED,
+  rejectSocket,
+  ROOM_HEADER,
+  send,
+  trySend,
+  upgraded,
+  WORDS_HEADER,
+} from "./ws";
 
 /**
  * Per-socket state. Lives on the socket (survives hibernation), never in storage.
- * `id` is a random per-connection tag used only to skip the sender when relaying.
+ * `id` is a random per-connection tag: it skips the sender when relaying, and
+ * addresses key-exchange frames. It's told to the socket in its hello.
  * `ttl` (seconds) lets later joiners learn the room's total lifetime without storing it.
  * `owner` (SHA-256 of the creator's secret) and `locked` are room-wide; every socket carries a
  * copy, so they live as long as somebody is connected and are never written to storage.
+ * `lobby`: knocked with 4 words and hasn't been let in. It can only exchange key-exchange
+ * frames with members, never sees room traffic, and doesn't count as a person.
  */
 type Attachment = {
   id: string;
@@ -32,6 +54,8 @@ type Attachment = {
   ttl: number;
   owner?: string;
   locked: boolean;
+  lobby?: true;
+  since: number;
 };
 
 /**
@@ -59,6 +83,8 @@ export class Room extends DurableObject<Env> {
 
     // set (and validated) by the worker only, from the client's subprotocol offer
     const create = request.headers.get(CREATE_HEADER);
+    const words = request.headers.get(WORDS_HEADER);
+    const knocking = request.headers.get(LOBBY_HEADER) !== null;
     // the creator sends the hash of its secret
     const ownerParam = request.headers.get(OWNER_HEADER) ?? undefined;
     const now = Date.now();
@@ -68,48 +94,68 @@ export class Room extends DurableObject<Env> {
     let expiresAt = loaded.expiresAt;
 
     if (goneUntil !== undefined) {
-      if (now < goneUntil) return this.reject("gone");
+      if (now < goneUntil) return this.reject(create === null ? "gone" : "taken");
       await this.ctx.storage.deleteAll();
       expiresAt = undefined;
     }
     if (expiresAt !== undefined && now >= expiresAt) {
       await this.expire(expiresAt);
-      return this.reject("gone");
+      return this.reject(create === null ? "gone" : "taken");
     }
     if (expiresAt === undefined) {
       // joining never creates a room; the worker has already validated `create`
-      if (create === null) return this.reject("not_found");
+      if (create === null || knocking) return this.reject("not_found");
       expiresAt = now + Number(create) * 1000;
+      // the words have to be free before the room exists
+      if (words !== null) {
+        const door = this.env.DOOR.get(this.env.DOOR.idFromName(doorName(words)));
+        if (!(await door.claim(request.headers.get(ROOM_HEADER) ?? "", expiresAt))) return this.reject("taken");
+      }
       await this.ctx.storage.put("expiresAt", expiresAt);
       await this.ctx.storage.setAlarm(expiresAt);
       creating = true;
     }
 
     const peers = this.open();
-    const room = peers[0]?.deserializeAttachment() as Attachment | null | undefined;
+    const room = (peers[0] ?? this.lobby()[0])?.deserializeAttachment() as Attachment | null | undefined;
+    // a create for a room that already exists is a collision or an attempt to hijack it,
+    // unless it's the creator retrying a create whose hello never arrived
+    if (create !== null && !creating && !(ownerParam !== undefined && room?.owner === ownerParam)) return this.reject("taken");
     // only the request that creates the room can set the owner; an empty room has no owner left
     const owner = creating ? ownerParam : room?.owner;
     const locked = room?.locked ?? false;
-    if (locked && !(owner !== undefined && ownerParam === owner)) return this.reject("locked");
+    if (locked && !(owner !== undefined && ownerParam === owner && !knocking)) return this.reject("locked");
     if (peers.length >= MAX_PARTICIPANTS) return this.reject("full");
+    if (knocking) {
+      // nobody inside can let anyone in; and only a few knockers at a time
+      if (peers.length === 0) return this.reject("not_found");
+      this.sweepLobby(now);
+      if (this.lobby().length >= MAX_LOBBY) return this.reject("full");
+    }
     const ttl = creating ? Number(create) : (room?.ttl ?? inferTtl(expiresAt - now));
 
     const [client, server] = Object.values(new WebSocketPair());
-    this.ctx.acceptWebSocket(server);
+    this.ctx.acceptWebSocket(server!);
     const att: Attachment = {
-      id: crypto.randomUUID(),
+      id: newTag(),
       tokens: RATE_BURST,
       last: now,
       exp: expiresAt,
       ttl,
       owner,
       locked,
+      since: now,
+      ...(knocking ? { lobby: true as const } : {}),
     };
-    server.serializeAttachment(att);
+    server!.serializeAttachment(att);
 
-    const n = peers.length + 1;
-    send(server, { t: "hello", now, expiresAt, ttl, n, locked });
-    for (const p of peers) send(p, { t: "presence", n });
+    if (knocking) {
+      send(server!, { t: "hello", now, expiresAt, ttl, n: peers.length, locked, tag: att.id, lobby: true });
+    } else {
+      const n = peers.length + 1;
+      send(server!, { t: "hello", now, expiresAt, ttl, n, locked, tag: att.id });
+      for (const p of peers) send(p, { t: "presence", n });
+    }
     return upgraded(client!);
   }
 
@@ -122,6 +168,10 @@ export class Room extends DurableObject<Env> {
       const { expiresAt } = await this.load();
       if (expiresAt !== undefined) await this.expire(expiresAt);
       else ws.close(CLOSE.expired, "room expired");
+      return;
+    }
+    if (att.lobby && now - att.since >= LOBBY_MS) {
+      closeQuietly(ws, CLOSE.timeout, "nobody let you in");
       return;
     }
     if (typeof message !== "string") {
@@ -158,6 +208,15 @@ export class Room extends DurableObject<Env> {
       send(ws, { t: "error", code: frame ?? "bad" });
       return;
     }
+    if (frame.t === "kx") {
+      this.relayKx(ws, att, frame);
+      return;
+    }
+    // a knocker can only do the key exchange
+    if (att.lobby) {
+      send(ws, { t: "error", code: "bad" });
+      return;
+    }
     if (frame.t !== "msg") {
       await this.control(ws, att, frame);
       return;
@@ -171,16 +230,12 @@ export class Room extends DurableObject<Env> {
   }
 
   async webSocketClose(ws: WebSocket): Promise<void> {
-    try {
-      ws.close(1000);
-    } catch {
-      // already closed
-    }
-    if (!this.ctx.getTags(ws).includes(REJECTED)) this.announcePresence(idOf(ws));
+    closeQuietly(ws, 1000);
+    this.left(ws);
   }
 
   async webSocketError(ws: WebSocket): Promise<void> {
-    if (!this.ctx.getTags(ws).includes(REJECTED)) this.announcePresence(idOf(ws));
+    this.left(ws);
   }
 
   async alarm(): Promise<void> {
@@ -196,8 +251,25 @@ export class Room extends DurableObject<Env> {
     else await this.ctx.storage.setAlarm(expiresAt);
   }
 
+  /**
+   * Key-exchange frames. Without `to` they go to every member (a member's to the others,
+   * a knocker's to everyone inside). With `to` they go to that one socket; a knocker can
+   * only address members. The relay adds `from`, so the answer can find its way back.
+   */
+  private relayKx(ws: WebSocket, att: Attachment, f: Extract<Frame, { t: "kx" }>): void {
+    const out = JSON.stringify({ t: "kx", from: att.id, d: f.d });
+    if (f.to === undefined) {
+      for (const p of this.open()) if (idOf(p) !== att.id) trySend(p, out);
+      return;
+    }
+    if (f.to === att.id) return;
+    const pool = att.lobby ? this.open() : [...this.open(), ...this.lobby()];
+    const target = pool.find((p) => idOf(p) === f.to);
+    if (target) trySend(target, out);
+  }
+
   /** creator-only actions; the proof is checked against the hash the creator registered */
-  private async control(ws: WebSocket, att: Attachment, f: Exclude<Frame, { t: "msg" }>): Promise<void> {
+  private async control(ws: WebSocket, att: Attachment, f: Extract<Frame, { t: "melt" | "lock" }>): Promise<void> {
     if (att.owner === undefined || (await sha256b64url(f.owner)) !== att.owner) {
       send(ws, { t: "error", code: "bad" });
       return;
@@ -207,11 +279,17 @@ export class Room extends DurableObject<Env> {
       await this.expire(expiresAt ?? Date.now(), "melted");
       return;
     }
-    for (const p of this.open()) {
+    for (const p of [...this.open(), ...this.lobby()]) {
       const a = p.deserializeAttachment() as Attachment;
       a.locked = f.on;
       p.serializeAttachment(a);
-      send(p, { t: "locked", on: f.on });
+      if (a.lobby) {
+        // a locked door sends knockers away
+        if (f.on) {
+          send(p, { t: "error", code: "locked" });
+          closeQuietly(p, CLOSE.locked, "locked");
+        }
+      } else send(p, { t: "locked", on: f.on });
     }
   }
 
@@ -219,11 +297,7 @@ export class Room extends DurableObject<Env> {
   private async expire(expiresAt: number, why: "expired" | "melted" = "expired"): Promise<void> {
     for (const ws of this.ctx.getWebSockets()) {
       send(ws, { t: why });
-      try {
-        ws.close(CLOSE[why], `room ${why}`);
-      } catch {
-        // already closed
-      }
+      closeQuietly(ws, CLOSE[why], `room ${why}`);
     }
     await this.ctx.storage.deleteAll();
     const goneUntil = expiresAt + GONE_MARGIN_MS;
@@ -231,26 +305,42 @@ export class Room extends DurableObject<Env> {
     await this.ctx.storage.setAlarm(goneUntil);
   }
 
-  /**
-   * Accept the upgrade only to tell the browser why, then close: browsers can't
-   * read the HTTP status of a failed upgrade. Goes through the hibernation API
-   * like every other socket here; a plain `accept()`ed socket that is closed this
-   * early makes the runtime report a lost connection.
-   */
   private reject(code: ErrorCode): Response {
-    const [client, server] = Object.values(new WebSocketPair());
-    this.ctx.acceptWebSocket(server, [REJECTED]);
-    send(server, { t: "error", code });
-    server.close(CLOSE[code], code);
-    return upgraded(client!);
+    return rejectSocket(this.ctx, code);
   }
 
-  private announcePresence(leavingId: string | undefined): void {
-    const rest = this.open().filter((p) => idOf(p) !== leavingId);
+  /** a socket went away: members hear the new count; when the last member leaves, knockers go too */
+  private left(ws: WebSocket): void {
+    if (this.ctx.getTags(ws).includes(REJECTED)) return;
+    const att = ws.deserializeAttachment() as Attachment | null;
+    if (!att || att.lobby) return;
+    const rest = this.open().filter((p) => idOf(p) !== att.id);
     for (const p of rest) send(p, { t: "presence", n: rest.length });
+    if (rest.length === 0) {
+      for (const p of this.lobby()) {
+        send(p, { t: "error", code: "not_found" });
+        closeQuietly(p, CLOSE.not_found, "nobody inside");
+      }
+    }
   }
 
+  private sweepLobby(now: number): void {
+    for (const p of this.lobby()) {
+      const a = p.deserializeAttachment() as Attachment;
+      if (now - a.since >= LOBBY_MS) closeQuietly(p, CLOSE.timeout, "nobody let you in");
+    }
+  }
+
+  /** members: open sockets that aren't knocking */
   private open(): WebSocket[] {
+    return this.live().filter((ws) => !(ws.deserializeAttachment() as Attachment).lobby);
+  }
+
+  private lobby(): WebSocket[] {
+    return this.live().filter((ws) => (ws.deserializeAttachment() as Attachment).lobby);
+  }
+
+  private live(): WebSocket[] {
     return this.ctx.getWebSockets().filter((ws) => ws.readyState === WebSocket.OPEN && idOf(ws) !== undefined);
   }
 
@@ -260,10 +350,17 @@ export class Room extends DurableObject<Env> {
   }
 }
 
-const REJECTED = "rejected";
+function newTag(): string {
+  const b = crypto.getRandomValues(new Uint8Array(8));
+  return btoa(String.fromCharCode(...b)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
 
-function isErrorCode(code: string): code is ErrorCode {
-  return code !== "expired" && Object.hasOwn(CLOSE, code);
+function closeQuietly(ws: WebSocket, code: number, reason?: string): void {
+  try {
+    ws.close(code, reason);
+  } catch {
+    // already closed
+  }
 }
 
 function idOf(ws: WebSocket): string | undefined {
@@ -272,6 +369,7 @@ function idOf(ws: WebSocket): string | undefined {
 
 type Frame =
   | { t: "msg"; iv: string; ct: string }
+  | { t: "kx"; to?: string; d: string }
   | { t: "melt"; owner: string }
   | { t: "lock"; owner: string; on: boolean };
 
@@ -283,15 +381,23 @@ function parseFrame(raw: string): Frame | "too_big" | null {
     return null;
   }
   if (typeof v !== "object" || v === null) return null;
-  const { t, iv, ct, owner, on } = v as Record<string, unknown>;
+  const { t, iv, ct, owner, on, to, d } = v as Record<string, unknown>;
   if (t === "melt" || t === "lock") {
     if (typeof owner !== "string" || !OWNER_RE.test(owner)) return null;
     if (t === "melt") return { t, owner };
     return typeof on === "boolean" ? { t, owner, on } : null;
   }
+  if (t === "kx") {
+    if (typeof d !== "string" || d.length === 0 || !B64URL_RE.test(d)) return null;
+    if (d.length > MAX_KX_CHARS) return "too_big";
+    if (to === undefined) return { t, d };
+    return typeof to === "string" && TAG_RE.test(to) ? { t, to, d } : null;
+  }
   if (t !== "msg" || typeof iv !== "string" || typeof ct !== "string") return null;
-  if (iv.length !== IV_CHARS || !B64URL_RE.test(iv) || !B64URL_RE.test(ct) || ct.length < 22) return null;
+  if (iv.length !== IV_CHARS || !B64URL_RE.test(iv) || !B64URL_RE.test(ct)) return null;
   if (ct.length > MAX_CT_CHARS) return "too_big";
+  // padded to fixed sizes: any other length isn't one of ours
+  if (!CT_CHARS.includes(ct.length)) return null;
   return { t: "msg", iv, ct };
 }
 

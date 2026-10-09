@@ -3,6 +3,7 @@ import { navigate } from "../lib/router";
 import type { View } from "../state/session";
 import { useStore } from "../state/session";
 import { Mascot } from "./Mascot";
+import { DoorNotices, Doorstep } from "./RoomDoor";
 import { RoomBar, timeLeft, URGENT } from "./RoomBar";
 import { RoomComposer } from "./RoomComposer";
 import { RoomMessages } from "./RoomMessages";
@@ -93,9 +94,21 @@ function Room({ view, session }: { view: View; session: SessionApi }) {
     [session, view.nick],
   );
   const link = sharing ? session.shareLink() : null;
+  const outside = view.status === "waiting" || view.status === "knocking";
+  const door = !outside && (view.knocks.length > 0 || view.checks.some((c) => c.state === "open"));
+
+  if (outside) {
+    return (
+      <div className="room room--outside">
+        <Doorstep view={view} onCancel={() => session.leave(null)} />
+      </div>
+    );
+  }
 
   return (
-    <div className={`room${urgent ? " room--urgent" : ""}${view.status === "live" ? "" : " room--offline"}`}>
+    <div
+      className={`room${urgent ? " room--urgent" : ""}${view.status === "live" ? "" : " room--offline"}${door ? " room--door" : ""}`}
+    >
       <RoomBar
         view={view}
         leftMs={leftMs}
@@ -105,6 +118,7 @@ function Room({ view, session }: { view: View; session: SessionApi }) {
         onLock={(on) => session.lock(on)}
         onMelt={() => session.meltNow()}
       />
+      {door && <DoorNotices knocks={view.knocks} checks={view.checks} api={session} />}
       <RoomMessages
         lines={view.lines}
         isCreator={view.isCreator}
@@ -114,7 +128,7 @@ function Room({ view, session }: { view: View; session: SessionApi }) {
         actions={actions}
       />
       <RoomComposer view={view} session={session} />
-      {link && <ShareSheet link={link} onClose={() => setSharing(false)} />}
+      {link && <ShareSheet link={link} words={view.words} onClose={() => setSharing(false)} />}
     </div>
   );
 }
