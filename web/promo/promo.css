@@ -1,0 +1,295 @@
+html,
+body {
+  margin: 0;
+  background: #060a18;
+}
+:root {
+  --puddle: rgba(127, 231, 242, 0.55);
+  --steam: rgba(220, 240, 255, 0.55);
+  --accent: #7fe7f2;
+}
+.stage {
+  position: relative;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  color: #f2f7fb;
+  font-family: "Quicksand Variable", sans-serif;
+}
+.layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.scene {
+  position: absolute;
+  inset: 0;
+}
+.mono {
+  font-family: "JetBrains Mono Variable", monospace;
+}
+.word {
+  display: inline-block;
+}
+.vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.45) 100%);
+  pointer-events: none;
+}
+.glow {
+  position: absolute;
+  width: 900px;
+  height: 900px;
+  margin: -450px 0 0 -450px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(63, 211, 230, 0.28), transparent);
+}
+
+.wordmark {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 170px;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+.wordmark--inline {
+  position: static;
+  font-size: 200px;
+}
+.tagline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 58px;
+  font-weight: 600;
+  color: #c9f6fb;
+}
+.headline {
+  font-size: 128px;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.02;
+}
+.headline.accent {
+  color: #7fe7f2;
+}
+.center {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+}
+.sub {
+  font-size: 40px;
+  font-weight: 500;
+  color: #a3b3cc;
+  line-height: 1.35;
+}
+.sub.mono {
+  font-size: 32px;
+}
+.note {
+  position: absolute;
+  font-size: 30px;
+  color: #a3b3cc;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 16px 30px;
+  border-radius: 999px;
+  border: 2px solid rgba(170, 225, 255, 0.28);
+  background: rgba(150, 200, 255, 0.08);
+  font-size: 32px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pill--on {
+  background: #7fe7f2;
+  border-color: #7fe7f2;
+  color: #0b1530;
+}
+.pill--big {
+  font-size: 54px;
+  padding: 20px 40px;
+  background: rgba(127, 231, 242, 0.14);
+  border-color: rgba(127, 231, 242, 0.55);
+}
+.pill--word {
+  font-size: 28px;
+  padding: 10px 20px;
+}
+
+.panel {
+  position: absolute;
+  border-radius: 48px;
+  border: 2px solid rgba(170, 225, 255, 0.18);
+  background: linear-gradient(160deg, rgba(150, 200, 255, 0.1), rgba(150, 200, 255, 0.03));
+  box-shadow: 0 40px 120px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+.clock {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 590px;
+  text-align: center;
+  font-size: 76px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.clock--big {
+  top: 120px;
+  font-size: 60px;
+  color: #a3b3cc;
+}
+.caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 24px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #a3b3cc;
+}
+
+.linkbar {
+  position: absolute;
+  padding: 26px 40px;
+  border-radius: 28px;
+  border: 2px solid rgba(170, 225, 255, 0.22);
+  background: rgba(10, 16, 36, 0.7);
+  font-size: 40px;
+  white-space: nowrap;
+}
+.caret {
+  display: inline-block;
+  width: 4px;
+  height: 44px;
+  margin-left: 4px;
+  vertical-align: -8px;
+  background: #7fe7f2;
+}
+
+.label {
+  margin-top: 6px;
+  text-align: center;
+  font-size: 26px;
+  color: #a3b3cc;
+  letter-spacing: 0.08em;
+}
+.capsule {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 88px;
+  width: 240px;
+  justify-content: center;
+  border-radius: 44px;
+  background: #7fe7f2;
+  color: #0b1530;
+  font-size: 28px;
+  font-weight: 700;
+  box-shadow: 0 0 60px rgba(127, 231, 242, 0.55);
+}
+.safety {
+  position: absolute;
+  width: 500px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+.verdict {
+  position: absolute;
+  left: 50%;
+  top: 960px;
+  white-space: nowrap;
+  font-size: 36px;
+  font-weight: 600;
+  color: #c9f6fb;
+}
+.tick {
+  display: inline-grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin-right: 12px;
+  border-radius: 50%;
+  background: #7fe7f2;
+  color: #0b1530;
+  font-weight: 800;
+}
+
+.relay__title {
+  margin: 30px 0 0;
+  text-align: center;
+  font-size: 44px;
+  font-weight: 700;
+}
+.relay__store {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -110px;
+  text-align: center;
+  font-size: 26px;
+  color: #a3b3cc;
+  line-height: 1.6;
+}
+.bubble {
+  position: absolute;
+  width: 420px;
+  box-sizing: border-box;
+  padding: 24px 30px;
+  border-radius: 34px 34px 34px 10px;
+  background: linear-gradient(155deg, #1f7a8f, #17607a);
+  border: 2px solid rgba(127, 231, 242, 0.38);
+  font-size: 30px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-align: center;
+}
+.bubble--sealed {
+  background: #0b1530;
+  color: #7fe7f2;
+  letter-spacing: 0.04em;
+}
+
+/* the mascot's geometry (from src/styles/mascot.css), without its time-based transitions:
+   every frame here is a pure function of t */
+.mascot {
+  overflow: visible;
+}
+.mascot__body,
+.mascot__puddle,
+.mascot__face {
+  transform-box: view-box;
+}
+.mascot__body {
+  transform-origin: 100px 176px;
+}
+.mascot__puddle {
+  transform-origin: 100px 178px;
+}
+.mascot__face {
+  transform-origin: 95px 118px;
+}
+.mascot__eye {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.mascot--gone .mascot__puddle {
+  opacity: 0.35;
+}
+.mascot__wisp,
+.mascot__drips {
+  display: none;
+}

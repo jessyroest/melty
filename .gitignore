@@ -5,3 +5,6 @@ dist
 *.log
 .env.local
 web/dist-share
+web/dist-promo
+# rendered promo video (node scripts/promo-video.mjs): shared, not versioned
+*.mp4
