@@ -33,6 +33,6 @@
   ],
   "vars": {
     // the deployed origin; rewritten by scripts/deploy-share.mjs
-    "ALLOWED_ORIGINS": "https://melty.unleashed-moat.workers.dev"
+    "ALLOWED_ORIGINS": "https://melty.jessy-roest.workers.dev"
   }
 }
