@@ -84,6 +84,18 @@ try {
   check(true, "nickname change reaches the other side");
 
   check(await storageIsEmpty(a.page), "creator: no localStorage/sessionStorage/cookies/IndexedDB");
+  // the PWA's service worker caches the app's own static files, and nothing else
+  const cached = await a.page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+    const urls = [];
+    for (const k of await caches.keys()) for (const r of await (await caches.open(k)).keys()) urls.push(r.url);
+    return urls;
+  });
+  const staticPath = /^\/(index\.html|sw\.js|favicon\.svg|manifest\.webmanifest|assets\/[\w.-]+|brand\/[\w.-]+)$/;
+  check(
+    cached.length > 0 && cached.every((u) => new URL(u).origin === new URL(WEB).origin && staticPath.test(new URL(u).pathname) && !u.includes("#")),
+    `the service worker cached only static app files (${cached.length})`,
+  );
   check(await storageIsEmpty(b.page), "joiner: no localStorage/sessionStorage/cookies/IndexedDB");
   if (SHOTS) await a.page.screenshot({ path: `${SHOTS}/chat-a.png` });
 

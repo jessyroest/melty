@@ -1,7 +1,6 @@
 import {
   type RefObject,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -63,19 +62,17 @@ function NeverLine({ text }: { text: string }) {
     return { chars, drips };
   }, [text]);
 
-  // drips hang under real letters, so measure where those letters are
-  useLayoutEffect(() => {
+  // drips hang under real letters, so measure where those letters are. Only from the
+  // ResizeObserver (it fires once right after layout, for every line in the same frame) and
+  // when the font arrives: measuring synchronously on mount forced a full-page layout per line.
+  useEffect(() => {
     const box = ref.current;
     if (!box) return;
     const measure = () => {
       const els = box.querySelectorAll<HTMLElement>(".nv-ch");
-      setXs(
-        drips.map((d) =>
-          els[d.at] ? els[d.at]!.offsetLeft + els[d.at]!.offsetWidth / 2 : 0,
-        ),
-      );
+      const next = drips.map((d) => (els[d.at] ? els[d.at]!.offsetLeft + els[d.at]!.offsetWidth / 2 : 0));
+      setXs((prev) => (prev.length === next.length && prev.every((x, i) => x === next[i]) ? prev : next));
     };
-    measure();
     const ro = new ResizeObserver(measure);
     ro.observe(box);
     document.fonts?.ready.then(measure).catch(() => {});

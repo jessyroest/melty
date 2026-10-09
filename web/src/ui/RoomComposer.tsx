@@ -21,7 +21,8 @@ export function RoomComposer({ view, session }: { view: View; session: SessionAp
     id: "xxxxxxxxxxx",
     nick: view.nick,
     text,
-    ts: Date.now(),
+    // any 13-digit timestamp encodes to the same size as the real one
+    ts: 1_700_000_000_000,
     ...(burn ? { burn: true as const } : {}),
   });
   const nearLimit = size > MAX_PLAINTEXT_BYTES * 0.8;
@@ -185,6 +186,11 @@ function NickChip({ nick, onSave }: { nick: string; onSave: (nick: string) => vo
   const [draft, setDraft] = useState(nick);
   const open = useRef(false);
   const chip = useRef<HTMLButtonElement>(null);
+  const field = useRef<HTMLInputElement>(null);
+  // the field appears because you clicked the chip: put the cursor in it (and select the old name)
+  useLayoutEffect(() => {
+    if (editing) field.current?.focus();
+  }, [editing]);
   const style = { "--hue": nickHue(editing ? draft || nick : nick) } as CSSProperties;
 
   function finish(save: boolean, refocus: boolean) {
@@ -210,6 +216,7 @@ function NickChip({ nick, onSave }: { nick: string; onSave: (nick: string) => vo
           your nickname
         </label>
         <input
+          ref={field}
           id="nick"
           className="r-nick__input"
           value={draft}
@@ -218,7 +225,6 @@ function NickChip({ nick, onSave }: { nick: string; onSave: (nick: string) => vo
           autoComplete="off"
           spellCheck={false}
           enterKeyHint="done"
-          autoFocus
           onFocus={(e) => e.currentTarget.select()}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {

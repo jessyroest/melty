@@ -4,9 +4,6 @@
 // Deliberately NOT type-checked (typescript-eslint "recommended", not
 // "recommended-type-checked"), so linting stays fast and needs no tsconfig wiring.
 //
-// The block marked "TODO(lint)" at the bottom downgrades rules to "warn" because they
-// fired on the existing code when ESLint was introduced. They are real findings to work
-// through, not accepted style: promote each back to "error" once its warnings are gone.
 import { defineConfig } from "eslint/config";
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
@@ -59,30 +56,12 @@ export default defineConfig(
   },
   {
     // The browser scripts (e2e, history-check) pass callbacks to page.evaluate(), which run in the browser.
-    files: ["scripts/e2e-*.mjs", "scripts/history-check.mjs"],
+    files: ["scripts/e2e-*.mjs", "scripts/history-check.mjs", "scripts/brand-images.mjs"],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
-
-  // TODO(lint): downgraded to "warn" when ESLint was introduced; see the comment at the top.
   {
-    rules: {
-      "prefer-const": "warn",
-    },
-  },
-  {
-    files: ["web/src/**/*.{ts,tsx}"],
-    rules: {
-      "react-hooks/set-state-in-effect": "warn",
-      "react-hooks/purity": "warn",
-      "react-hooks/refs": "warn",
-    },
-  },
-  {
-    files: ["web/src/**/*.tsx"],
-    rules: {
-      "jsx-a11y/click-events-have-key-events": "warn",
-      "jsx-a11y/no-noninteractive-element-interactions": "warn",
-      "jsx-a11y/no-autofocus": "warn",
-    },
+    // the service worker template (filled in at build time: __VERSION__, __ASSETS__)
+    files: ["web/sw.template.js"],
+    languageOptions: { globals: { ...globals.serviceworker, __ASSETS__: "readonly" } },
   },
 );

@@ -34,6 +34,11 @@ export function Frost({ density = 1, bursts = false }: { density?: number; burst
     const sparks: Spark[] = [];
     let raf = 0;
     let visible = true;
+    // phones: a lighter canvas (1x pixels, a new picture every other frame), and it only starts
+    // drifting once the page has settled, so it doesn't compete with the first paint
+    const phone = matchMedia("(pointer: coarse)").matches;
+    let frame = 0;
+    let settled = !phone;
     // the pointer, and how "awake" the swirl is (decays when the pointer rests)
     const pointer = { x: -9999, y: -9999, energy: 0 };
     const light = matchMedia("(prefers-color-scheme: light)");
@@ -54,7 +59,7 @@ export function Frost({ density = 1, bursts = false }: { density?: number; burst
     });
 
     const resize = () => {
-      const dpr = Math.min(2, devicePixelRatio || 1);
+      const dpr = Math.min(phone ? 1 : 2, devicePixelRatio || 1);
       const r = c.getBoundingClientRect();
       if (r.width === w && r.height === h) return;
       w = r.width;
@@ -152,16 +157,23 @@ export function Frost({ density = 1, bursts = false }: { density?: number; burst
         if (s.life <= 0) sparks.splice(i, 1);
       }
 
-      draw();
+      if (!phone || ++frame % 2 === 0 || sparks.length) draw();
       if (visible && !document.hidden) raf = requestAnimationFrame(step);
     };
 
     const start = () => {
-      if (!raf && !reduced) raf = requestAnimationFrame(step);
+      if (!raf && !reduced && settled) raf = requestAnimationFrame(step);
     };
+    const settle = phone
+      ? setTimeout(() => {
+          settled = true;
+          start();
+        }, 2500)
+      : undefined;
 
     const burst = (cx: number, cy: number, count: number) => {
       if (reduced) return;
+      settled = true;
       const r = c.getBoundingClientRect();
       const x = cx - r.left;
       const y = cy - r.top;
@@ -233,6 +245,7 @@ export function Frost({ density = 1, bursts = false }: { density?: number; burst
     light.addEventListener("change", onScheme);
     return () => {
       cancelAnimationFrame(raf);
+      clearTimeout(settle);
       io.disconnect();
       removeEventListener("pointermove", onMove);
       removeEventListener("pointerup", onUp);

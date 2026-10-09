@@ -9,7 +9,7 @@ import { useSheet } from "./RoomSheet";
 /** Paste a room link (or just the part after #), or type the room's 4 words, to join from this tab. */
 export function JoinDialog({ onClose }: { onClose: () => void }) {
   const input = useRef<HTMLInputElement>(null);
-  const { ref, onClick } = useSheet(onClose, input);
+  const { ref } = useSheet(onClose, input);
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [tries, setTries] = useState(0);
@@ -25,7 +25,7 @@ export function JoinDialog({ onClose }: { onClose: () => void }) {
     if (looksLikeWords(raw)) {
       const code = parseDoorCode(raw);
       if (code) {
-        joinWithWords(code);
+        await joinWithWords(code);
         onClose();
         navigate("/r");
       } else {
@@ -50,7 +50,7 @@ export function JoinDialog({ onClose }: { onClose: () => void }) {
   }, [tries]);
 
   return (
-    <dialog ref={ref} className="sheet sheet--join" aria-labelledby="join-title" onClose={onClose} onClick={onClick}>
+    <dialog ref={ref} className="sheet sheet--join" aria-labelledby="join-title" onClose={onClose}>
       <div className="sheet__head">
         <div className="sheet__titled">
           <Mascot left={1} size={52} className="sheet__mascot" />

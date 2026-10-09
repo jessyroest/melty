@@ -3,22 +3,8 @@ import { useSyncExternalStore } from "react";
 import type { Sealed } from "../crypto/aead";
 import { deriveLink, importRoomKey, type LinkKeys, newSecret, ROOM_KEY_BYTES, type RoomKeys, SECRET_BYTES } from "../crypto/derive";
 import { LEAVE_COUNTER, newSenderId, openMsg, ReplayGuard, sealMsg } from "../crypto/frame";
-import {
-  decodeKx,
-  encodeKx,
-  hostAccept,
-  type HostKeys,
-  hostKeys,
-  joinerAnswer,
-  type KxMode,
-  type KxMsg,
-  type KxResult,
-  newHandshakeId,
-  openBundle,
-  safetyCode,
-  sealBundle,
-  wipeHost,
-} from "../crypto/kx";
+import type { HostKeys, KxMode, KxMsg, KxResult } from "../crypto/kx";
+import * as kx from "../crypto/kx";
 import {
   cleanNick,
   decodeInner,
@@ -531,7 +517,7 @@ export class Session {
     this.joining?.result?.bundleKey.fill(0);
     this.joining = null;
     for (const h of this.hosting.values()) {
-      wipeHost(h.keys);
+      kx.wipeHost(h.keys);
       clearTimeout(h.timer);
     }
     this.hosting.clear();
@@ -590,7 +576,7 @@ export class Session {
   private sendKx(to: string | undefined, m: KxMsg): boolean {
     this.hasTokens(0);
     this.tokens = Math.max(0, this.tokens - 1);
-    return this.conn?.sendKx(to, encodeKx(m)) ?? false;
+    return this.conn?.sendKx(to, kx.encodeKx(m)) ?? false;
   }
 
   /** keep one encrypted goodbye ready, so leaving (and pagehide) can send it without awaiting */
@@ -699,7 +685,7 @@ export class Session {
   private startJoin(mode: KxMode): void {
     clearTimeout(this.kxTimer);
     this.joining?.result?.bundleKey.fill(0);
-    const hs = newHandshakeId();
+    const hs = kx.newHandshakeId();
     this.joining = { hs, mode, result: null, host: null };
     this.sendKx(undefined, { k: "req", hs, mode });
     this.kxTimer = setTimeout(() => this.joinTimedOut(), mode === "link" ? LINK_WAIT_MS : KNOCK_WAIT_MS);
@@ -712,7 +698,7 @@ export class Session {
   }
 
   private onKx(from: string, d: string): void {
-    const m = decodeKx(d);
+    const m = kx.decodeKx(d);
     if (!m || this.ended) return;
     switch (m.k) {
       case "req":
@@ -737,7 +723,7 @@ export class Session {
     if (!j || j.result || !sameId(j.hs, m.hs)) return;
     const psk = j.mode === "link" ? (this.linkKeys?.psk ?? null) : null;
     if (j.mode === "link" && !psk) return;
-    const r = joinerAnswer(j.mode, j.hs, m, psk);
+    const r = kx.joinerAnswer(j.mode, j.hs, m, psk);
     if (!r) return;
     j.result = r.result;
     j.host = from;
@@ -750,7 +736,7 @@ export class Session {
     let link: LinkKeys;
     let bundle;
     try {
-      bundle = await openBundle(j.result, m);
+      bundle = await kx.openBundle(j.result, m);
       link = await deriveLink(bundle.link);
     } catch {
       return; // not sealed for this handshake: someone in the middle, or junk
@@ -776,7 +762,7 @@ export class Session {
 
     if (j.mode === "code") {
       this.update({
-        checks: [...this.view.checks, { hs, role: "joiner", peer: bundle.host || null, words: safetyCode(th), state: "open" }],
+        checks: [...this.view.checks, { hs, role: "joiner", peer: bundle.host || null, words: kx.safetyCode(th), state: "open" }],
         status: "connecting",
       });
       // from the lobby into the room itself
@@ -827,10 +813,10 @@ export class Session {
   /** send an offer with fresh keys, and tell the others we've got this one */
   private host(tag: string, hsBytes: Bytes, mode: KxMode): void {
     const hs = toB64url(hsBytes);
-    const keys = hostKeys();
+    const keys = kx.hostKeys();
     const timer = setTimeout(() => {
       const h = this.hosting.get(hs);
-      if (h) wipeHost(h.keys);
+      if (h) kx.wipeHost(h.keys);
       this.hosting.delete(hs);
     }, HOST_WAIT_MS);
     this.hosting.set(hs, { tag, hs: hsBytes, mode, keys, timer });
@@ -846,16 +832,16 @@ export class Session {
     this.hosting.delete(hs);
     clearTimeout(h.timer);
     const psk = h.mode === "link" ? (this.linkKeys?.psk ?? null) : null;
-    const r = psk || h.mode === "code" ? hostAccept(h.mode, h.hs, h.keys, m, psk) : null;
-    wipeHost(h.keys);
+    const r = psk || h.mode === "code" ? kx.hostAccept(h.mode, h.hs, h.keys, m, psk) : null;
+    kx.wipeHost(h.keys);
     // a wrong MAC: they don't have the link
     if (!r || !this.canHost()) return;
-    const sealed = await sealBundle(r, h.hs, { key: this.roomKey!, link: this.link!, code: this.code, host: this.view.nick });
+    const sealed = await kx.sealBundle(r, h.hs, { key: this.roomKey!, link: this.link!, code: this.code, host: this.view.nick });
     r.bundleKey.fill(0);
     if (this.ended) return;
     this.sendKx(from, sealed);
     if (h.mode === "code") {
-      this.update({ checks: [...this.view.checks, { hs, role: "host", peer: null, words: safetyCode(r.th), state: "open" }] });
+      this.update({ checks: [...this.view.checks, { hs, role: "host", peer: null, words: kx.safetyCode(r.th), state: "open" }] });
     }
   }
 
@@ -1188,7 +1174,7 @@ export async function joinFromFragment(fragment: string): Promise<boolean> {
 }
 
 /** knock with the room's 4 words */
-export function joinWithWords(code: DoorCode): void {
+export async function joinWithWords(code: DoorCode): Promise<void> {
   const s = new Session({ entry: "code", code });
   replace(s);
   s.connect();

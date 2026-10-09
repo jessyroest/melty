@@ -611,7 +611,7 @@ describe("phase 2: joining with the words", () => {
   it("knocks, gets let in, moves from the lobby into the room, and shows the safety words", async () => {
     const r = await room();
     const code = newDoorCode();
-    joinWithWords(code);
+    await joinWithWords(code);
     const lobby = last();
     expect(lobby.knock).toBe(code.join("-"));
     expect(lobby.roomId).toBeUndefined();
@@ -648,7 +648,7 @@ describe("phase 2: joining with the words", () => {
 
   it("different safety words: the joiner leaves and everything is wiped", async () => {
     const r = await room();
-    joinWithWords(newDoorCode());
+    await joinWithWords(newDoorCode());
     const lobby = last();
     hello(lobby, { lobby: true });
     await flush();
@@ -668,7 +668,7 @@ describe("phase 2: joining with the words", () => {
   });
 
   it("a 'no' ends the knock; silence ends it after the wait", async () => {
-    joinWithWords(newDoorCode());
+    await joinWithWords(newDoorCode());
     hello(last(), { lobby: true });
     await flush();
     const req = kxSent(last())[0]!.m as Extract<KxMsg, { k: "req" }>;
@@ -676,14 +676,14 @@ describe("phase 2: joining with the words", () => {
     expect(getStore().error).toBe("turned_away");
 
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
-    joinWithWords(newDoorCode());
+    await joinWithWords(newDoorCode());
     hello(last(), { lobby: true });
     vi.advanceTimersByTime(KNOCK_WAIT_MS + 1);
     expect(getStore().error).toBe("nobody");
   });
 
   it("unknown words get their own sentence", async () => {
-    joinWithWords(newDoorCode());
+    await joinWithWords(newDoorCode());
     last().onEvent({ type: "error", code: "not_found" });
     expect(getStore()).toMatchObject({ error: "not_found", notice: expect.stringMatching(/words/) });
   });

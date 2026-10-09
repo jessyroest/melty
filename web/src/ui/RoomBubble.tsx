@@ -51,6 +51,8 @@ export function Bubble({ line, nick, mine, actions }: { line: Line; nick: string
 
   return (
     <>
+      {/* phones: a tap on the bubble opens the reaction picker. keyboards and screen readers use the react button */}
+      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */}
       <p className={cls} onClick={onTap}>
         {frozen ? (
           <button className="r-bubble__thaw" type="button" onClick={() => actions.reveal(line.id)}>

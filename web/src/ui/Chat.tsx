@@ -118,6 +118,8 @@ function Room({ view, session }: { view: View; session: SessionApi }) {
         onLock={(on) => session.lock(on)}
         onMelt={() => session.meltNow()}
       />
+      {/* the room has no visible title; screen readers still get one to land on */}
+      <h1 className="sr-only">melty room</h1>
       {door && <DoorNotices knocks={view.knocks} checks={view.checks} api={session} />}
       <RoomMessages
         lines={view.lines}

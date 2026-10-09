@@ -135,7 +135,8 @@ export function LiveMascot({ left = 1, size = 120, className, pokeable = false, 
   const [shift, setShift] = useState({ x: 0, y: 0 });
   const [anim, setAnim] = useState<Anim>("");
   const [tilt, setTilt] = useState(0);
-  const lineIdx = useRef(Math.floor(Math.random() * LINES.length));
+  const [firstLine] = useState(() => Math.floor(Math.random() * LINES.length));
+  const lineIdx = useRef(firstLine);
   const pokes = useRef<number[]>([]);
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
   const tokens = useRef({ reaction: 0, anim: 0 });
@@ -143,7 +144,9 @@ export function LiveMascot({ left = 1, size = 120, className, pokeable = false, 
   const hovering = useRef(false);
   // what the timers and pointer callbacks need to know right now
   const now = useRef({ sleeping, reaction });
-  now.current = { sleeping, reaction };
+  useLayoutEffect(() => {
+    now.current = { sleeping, reaction };
+  });
 
   function later(fn: () => void, ms: number) {
     const t = setTimeout(() => {
@@ -205,6 +208,8 @@ export function LiveMascot({ left = 1, size = 120, className, pokeable = false, 
       }
     };
     return subscribe(onPointer, onSleep);
+    // react/play only touch refs and state setters: subscribing once, on mount, is the point
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // blink every few seconds, sometimes twice, now and then a wink
@@ -233,6 +238,8 @@ export function LiveMascot({ left = 1, size = 120, className, pokeable = false, 
     };
     next();
     return () => clearTimeout(t);
+    // one blink loop for the component's life; react() only touches refs and setters
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // hop when `bump` changes (skip the first render)
@@ -243,11 +250,14 @@ export function LiveMascot({ left = 1, size = 120, className, pokeable = false, 
       return;
     }
     play("hop", 520);
+    // only a new bump should hop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bump]);
 
+  // the last line stays put while the bubble fades out
+  if (line && line !== said) setSaid(line);
   useEffect(() => {
     if (!line) return;
-    setSaid(line);
     const t = setTimeout(() => setLine(null), 2600);
     return () => clearTimeout(t);
   }, [line]);

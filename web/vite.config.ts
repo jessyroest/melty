@@ -1,4 +1,5 @@
-import { writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
@@ -27,6 +28,20 @@ export default defineConfig(({ mode }) => {
         },
         closeBundle() {
           writeFileSync(resolve(outDir, "_headers"), pagesHeadersFile(headers));
+        },
+      },
+      {
+        // the service worker: precaches the built app shell, nothing else (see sw.template.js)
+        name: "service-worker",
+        apply: "build",
+        generateBundle(_opts, bundle) {
+          const built = Object.keys(bundle).filter((f) => f.endsWith(".js") || f.endsWith(".css") || f.endsWith(".woff2"));
+          const assets = ["/index.html", ...built.map((f) => `/${f}`), "/favicon.svg", "/brand/hero.webp", "/manifest.webmanifest"];
+          const version = createHash("sha256").update(built.sort().join("\n")).digest("hex").slice(0, 12);
+          const source = readFileSync(fileURLToPath(new URL("./sw.template.js", import.meta.url)), "utf8")
+            .replace("__VERSION__", version)
+            .replace("__ASSETS__", JSON.stringify(assets.sort()));
+          this.emitFile({ type: "asset", fileName: "sw.js", source });
         },
       },
     ],

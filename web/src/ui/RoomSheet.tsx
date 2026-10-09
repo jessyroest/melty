@@ -1,4 +1,4 @@
-import { type MouseEvent, type RefObject, useEffect, useRef } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 
 const SWIPE_CLOSE_PX = 90;
 
@@ -9,6 +9,8 @@ const SWIPE_CLOSE_PX = 90;
  */
 export function useSheet(onClose: () => void, initialFocus?: RefObject<HTMLElement | null>) {
   const ref = useRef<HTMLDialogElement>(null);
+  // what to focus when the sheet opens; read once, at open
+  const [focusTarget] = useState(initialFocus);
   const close = useRef(onClose);
   useEffect(() => {
     close.current = onClose;
@@ -18,8 +20,8 @@ export function useSheet(onClose: () => void, initialFocus?: RefObject<HTMLEleme
     const d = ref.current;
     if (!d || d.open) return;
     d.showModal();
-    initialFocus?.current?.focus();
-  }, []); // open exactly once
+    focusTarget?.current?.focus();
+  }, [focusTarget]); // focusTarget never changes: this opens exactly once
 
   // swipe down to dismiss, only while the sheet is scrolled to its top
   useEffect(() => {
@@ -73,13 +75,19 @@ export function useSheet(onClose: () => void, initialFocus?: RefObject<HTMLEleme
     };
   }, []);
 
-  function onClick(e: MouseEvent<HTMLDialogElement>) {
+  // a click on the backdrop closes the sheet (keyboards close the native <dialog> with Escape)
+  useEffect(() => {
     const d = ref.current;
-    if (!d || e.target !== d) return;
-    const r = d.getBoundingClientRect();
-    const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
-    if (!inside) onClose();
-  }
+    if (!d) return;
+    const click = (e: MouseEvent) => {
+      if (e.target !== d) return;
+      const r = d.getBoundingClientRect();
+      const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+      if (!inside) close.current();
+    };
+    d.addEventListener("click", click);
+    return () => d.removeEventListener("click", click);
+  }, []);
 
-  return { ref, onClick };
+  return { ref };
 }

@@ -1,5 +1,5 @@
 import { TTL_OPTIONS, type Ttl } from "@relay/protocol";
-import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { type CSSProperties, startTransition, useEffect, useRef, useState } from "react";
 import { createRoom, isMelted, setNotice } from "../state/session";
 import { Frost, frostBurst } from "./landing/Frost";
 import { Crack, HeroWords, Snowflake, TtlCube } from "./landing/HeroBits";
@@ -83,8 +83,30 @@ export function Home({ notice, onJoin }: { notice: string | null; onJoin: () => 
     return () => clearTimeout(t);
   }, [intro]);
 
+  // sections out of view keep their CSS animations paused: dozens of drips and ripples
+  // running below the fold cost phones real time (style and layout every frame) for nothing
+  const page = useRef<HTMLDivElement>(null);
+  // everything below the hero is rendered right after, as a low-priority (time-sliced) update,
+  // so the first paint and the start button don't wait for a page and a half of melting letters
+  const [rest, setRest] = useState(false);
+  useEffect(() => {
+    startTransition(() => setRest(true));
+  }, []);
+  useEffect(() => {
+    const root = page.current;
+    if (!root || !rest) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) e.target.classList.toggle("is-offscreen", !e.isIntersecting);
+      },
+      { rootMargin: "200px 0px" },
+    );
+    for (const el of root.children) if (el.tagName !== "SECTION" || !el.classList.contains("l-hero")) io.observe(el);
+    return () => io.disconnect();
+  }, [rest]);
+
   return (
-    <div className="landing">
+    <div className="landing" ref={page}>
       {melted && <MeltCurtain />}
       <section ref={hero} className={`l-hero${intro ? " is-intro" : ""}`}>
         <Frost bursts />
@@ -139,13 +161,17 @@ export function Home({ notice, onJoin }: { notice: string | null; onJoin: () => 
         </div>
       </section>
 
-      <NeverAsk />
-      <MeltScroll />
-      <IceWorks />
-      <UseCases />
-      <Honest />
-      <FinalCta onStart={focusStart} onJoin={onJoin} />
-      <Footer />
+      {rest && (
+        <>
+          <NeverAsk />
+          <MeltScroll />
+          <IceWorks />
+          <UseCases />
+          <Honest />
+          <FinalCta onStart={focusStart} onJoin={onJoin} />
+          <Footer />
+        </>
+      )}
     </div>
   );
 }

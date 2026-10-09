@@ -58,11 +58,14 @@ function FrostQuote({ seen }: { seen: boolean }) {
 /** a row's ttl: a tiny ring plus a clock that runs down (5x speed) while the row is live */
 function Ttl({ total, live, spoken }: { total: number; live: boolean; spoken: string }) {
   const [left, setLeft] = useState(total);
+  // a row that stops being live starts over from the full time next round
+  const [wasLive, setWasLive] = useState(live);
+  if (live !== wasLive) {
+    setWasLive(live);
+    if (!live) setLeft(total);
+  }
   useEffect(() => {
-    if (!live) {
-      setLeft(total);
-      return;
-    }
+    if (!live) return;
     const id = setInterval(() => {
       if (!document.hidden) setLeft((s) => (s > 1 ? s - 1 : total));
     }, 200);

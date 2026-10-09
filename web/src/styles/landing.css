@@ -109,3 +109,22 @@
     display: none;
   }
 }
+
+/* paused while out of view (see Home.tsx) */
+.landing > .is-offscreen,
+.landing > .is-offscreen *,
+.landing > .is-offscreen *::before,
+.landing > .is-offscreen *::after {
+  animation-play-state: paused !important;
+}
+
+/* below-the-fold sections without pinned scrolling: the browser skips their style, layout
+   and paint until they come near the screen (they're tall, animated and full of letters) */
+.l-works,
+.l-uses,
+.l-honest,
+.l-final,
+.l-footer {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 1100px;
+}

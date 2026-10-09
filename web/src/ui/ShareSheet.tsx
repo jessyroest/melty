@@ -22,7 +22,7 @@ type CopyState = "idle" | "copied" | "manual";
 export function ShareSheet({ link, words, onClose }: { link: string; words: string[] | null; onClose: () => void }) {
   const copyBtn = useRef<HTMLButtonElement>(null);
   const input = useRef<HTMLInputElement>(null);
-  const { ref, onClick } = useSheet(onClose, copyBtn);
+  const { ref } = useSheet(onClose, copyBtn);
   const [copied, setCopied] = useState<CopyState>("idle");
   const [burst, setBurst] = useState(0);
   const qr = useMemo(() => qrPath(link), [link]);
@@ -55,7 +55,7 @@ export function ShareSheet({ link, words, onClose }: { link: string; words: stri
   }
 
   return (
-    <dialog ref={ref} className="sheet sheet--share" aria-labelledby="share-title" onClose={onClose} onClick={onClick}>
+    <dialog ref={ref} className="sheet sheet--share" aria-labelledby="share-title" onClose={onClose}>
       <div className="sheet__head">
         <div>
           <span className="sheet__kicker mono">invite</span>

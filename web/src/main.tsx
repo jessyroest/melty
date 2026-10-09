@@ -58,6 +58,11 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") wake("visible");
 });
 
+// the PWA: a service worker that caches the app's own static files, never messages (sw.template.js)
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  addEventListener("load", () => void navigator.serviceWorker.register("/sw.js").catch(() => {}));
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />

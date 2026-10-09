@@ -24,7 +24,16 @@ const DRIPS: Record<number, { x: number; L: number; t: number; d: number }> = {
 type Stroke = { x: number; w: number; bottom: number };
 
 /** draw one glyph on a canvas and find the stroke nearest `hint` just above the baseline */
+/** the same glyph in the same font is the same shape: draw and scan it once */
+const strokes = new Map<string, Stroke | null>();
+
 function findStroke(ch: string, font: string, size: number, hint: number): Stroke | null {
+  const key = `${ch}|${font}|${hint}`;
+  if (!strokes.has(key)) strokes.set(key, scanStroke(ch, font, size, hint));
+  return strokes.get(key)!;
+}
+
+function scanStroke(ch: string, font: string, size: number, hint: number): Stroke | null {
   const c = document.createElement("canvas");
   const ctx = c.getContext("2d", { willReadFrequently: true });
   if (!ctx) return null;
@@ -96,36 +105,49 @@ export function DripText({ text }: { text: string }) {
       const size = parseFloat(cs.fontSize);
       const font = `${cs.fontStyle} ${cs.fontWeight} ${size}px ${cs.fontFamily}`;
       const surface = pool.getBoundingClientRect().top + pool.offsetHeight * 0.4;
-      root.querySelectorAll<HTMLElement>(".drip-ch").forEach((el) => {
+      // read everything first, then write: interleaving the two forced a layout per letter
+      const reads = [...root.querySelectorAll<HTMLElement>(".drip-ch")].map((el) => {
         const drip = el.querySelector<HTMLElement>(".drip");
         const probe = el.querySelector<HTMLElement>(".drip-probe");
-        if (!drip || !probe) return;
-        const hint = Number(el.dataset.hint);
-        const L = Number(el.dataset.len);
-        const s = findStroke(el.dataset.ch ?? "", font, size, hint);
+        if (!drip || !probe) return null;
+        const s = findStroke(el.dataset.ch ?? "", font, size, Number(el.dataset.hint));
         const y = probe.offsetTop + (s ? s.bottom - s.w * 0.28 : 0);
+        return { drip, s, y, L: Number(el.dataset.len), top: el.getBoundingClientRect().top + y };
+      });
+      for (const r of reads) {
+        if (!r) continue;
+        const { drip, s, y, L, top } = r;
         if (s) {
           drip.style.setProperty("--x", `${s.x}px`);
           drip.style.setProperty("--y", `${y}px`);
           drip.style.setProperty("--w", `${Math.max(4, s.w)}px`);
         }
-        const top = el.getBoundingClientRect().top + y;
         const fall = surface - top - L * 1.08 * size;
         // drips on an upper line would fall through the next one: they only ooze
         const upper = fall > size * 1.4;
         drip.classList.toggle("is-upper", upper);
         drip.style.setProperty("--L", `${upper ? Math.min(L, 0.26) : L}em`);
         drip.style.setProperty("--fall", `${Math.max(0, fall)}px`);
-      });
+      }
     };
     const schedule = () => {
       if (!frame) frame = requestAnimationFrame(place);
     };
-    place();
-    document.fonts?.ready.then(schedule);
+    // this sits at the very end of the page: measure once it gets close, not during page load
     const ro = new ResizeObserver(schedule);
-    ro.observe(root);
+    const near = new IntersectionObserver(
+      ([e]) => {
+        if (!e?.isIntersecting) return;
+        near.disconnect();
+        schedule();
+        document.fonts?.ready.then(schedule);
+        ro.observe(root);
+      },
+      { rootMargin: "800px 0px" },
+    );
+    near.observe(root);
     return () => {
+      near.disconnect();
       ro.disconnect();
       cancelAnimationFrame(frame);
     };
@@ -215,9 +237,13 @@ export function FinalCta({ onStart, onJoin }: { onStart: () => void; onJoin: () 
   const lastHop = useRef(0);
 
   // a farewell: two hops and a line when the end scrolls into view
+  const [wasSeen, setWasSeen] = useState(seen);
+  if (seen !== wasSeen) {
+    setWasSeen(seen);
+    if (seen) setBye(true);
+  }
   useEffect(() => {
     if (!seen) return;
-    setBye(true);
     const ts = [setTimeout(() => setBye(false), 4600)];
     if (!reduced) ts.push(setTimeout(() => setBump(1), 300), setTimeout(() => setBump(2), 850));
     return () => ts.forEach(clearTimeout);

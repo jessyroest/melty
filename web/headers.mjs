@@ -12,7 +12,8 @@ export function securityHeaders(relayUrl) {
     "font-src 'self'",
     `connect-src 'self' ${relayOrigin}`,
     "manifest-src 'self'",
-    "worker-src 'none'",
+    // the app's own service worker (/sw.js), nothing else
+    "worker-src 'self'",
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'none'",

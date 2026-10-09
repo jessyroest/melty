@@ -116,6 +116,8 @@ const MessageList = memo(function MessageList({ lines, isCreator, fraction, onIn
     } else {
       setUnseen((u) => u + 1);
     }
+    // only a new last line counts; a reaction or burn on the same line must not scroll or count as unseen
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [last?.id]);
 
   // the keyboard opening (or any resize) shouldn't lose your place at the bottom
@@ -147,7 +149,9 @@ const MessageList = memo(function MessageList({ lines, isCreator, fraction, onIn
 
   return (
     <>
-      <div ref={box} className="messages" role="log" aria-live="polite" aria-label="messages" onScroll={onScroll}>
+      {/* focusable, so keyboards can scroll the log even when nothing in it is a button */}
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex */}
+      <div ref={box} className="messages" role="log" aria-live="polite" aria-label="messages" tabIndex={0} onScroll={onScroll}>
         {items.length === 0 ? (
           <Empty isCreator={isCreator} fraction={fraction} onInvite={onInvite} />
         ) : (
