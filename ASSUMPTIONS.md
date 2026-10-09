@@ -214,3 +214,12 @@ The owner asked to "finish it", which covered the rest of the lock-down round (p
 - **Accessibility.** axe-core 4.14 (WCAG 2.0/2.1/2.2 A and AA plus best practices) over home, how-it-works, the join dialog, the share sheet, the room, the knock screen, the knock prompt, the safety words and the mismatch screen, in dark and light: no violations after two fixes (an `sr-only` h1 in the room, and the message log is focusable so keyboards can scroll it). This is an automated check, not a screen-reader session with a person.
 - **Lint debt.** All 18 warnings fixed and the `TODO(lint)` rules are errors again. Where the rule doesn't fit, a one-line disable says why (mount-only effects in `LiveMascot`, the message log's `[last?.id]` dependency, the bubble tap on phones that has a keyboard twin, the focusable log). Dialog backdrop clicks moved into `useSheet` as a native listener.
 - **e2e in a container.** The browser scripts accept `BROWSER_PATH` (any Chromium binary) next to `BROWSER_CHANNEL`.
+
+## Owner decisions (2026-10-09)
+
+The owner approved these deviations from SPEC.md:
+- **Room storage.** The relay stores the creator's owner hash and a lock flag in Durable Object storage, alongside `expiresAt`. Both are deleted at expiry.
+- **Who can hand over the key.** Anyone inside the room can let a newcomer in, not only the creator.
+- **Words mapping.** The 4-words → room id mapping is stored by the `Door` object until the room expires.
+
+`SPEC.md`'s "only the expiry time in DO storage" rule should be read with these exceptions.
