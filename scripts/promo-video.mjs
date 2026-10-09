@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Renders the promo video (web/promo) to an MP4, frame by frame, with a local
-// Chromium (playwright-core) and ffmpeg. Nothing is downloaded.
+// Chromium (playwright-core) and ffmpeg, with the soundtrack from
+// scripts/promo-audio.py (synthesized, needs python3 + numpy; skipped with SILENT=1).
+// Nothing is downloaded.
 //   node scripts/promo-video.mjs [out.mp4]
 //   STILLS=1,5,12.5 node scripts/promo-video.mjs   → just those moments, as PNGs
 // BROWSER_PATH=… or BROWSER_CHANNEL=chrome|msedge picks the browser; FPS (default 30).
@@ -48,12 +50,25 @@ try {
   if (!stills) {
     process.stdout.write("\rencoding…\n");
     mkdirSync(resolve(out, ".."), { recursive: true });
+    const silent = process.env.SILENT === "1";
+    const video = silent ? out : join(frames, "video.mp4");
     execFileSync("ffmpeg", [
       "-y", "-loglevel", "error",
       "-framerate", String(FPS), "-i", join(frames, "f%05d.png"),
       "-c:v", "libx264", "-preset", "slow", "-crf", "16", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-      out,
+      video,
     ], { stdio: "inherit" });
+    if (!silent) {
+      const wav = join(frames, "sound.wav");
+      execFileSync("python3", [fileURLToPath(new URL("./promo-audio.py", import.meta.url)), wav], { stdio: "inherit" });
+      // -14 LUFS: what the social platforms normalise to anyway
+      execFileSync("ffmpeg", [
+        "-y", "-loglevel", "error", "-i", video, "-i", wav,
+        "-map", "0:v", "-map", "1:a", "-c:v", "copy",
+        "-af", "loudnorm=I=-14:TP=-1.5:LRA=11", "-ar", "48000", "-c:a", "aac", "-b:a", "192k",
+        "-shortest", "-movflags", "+faststart", out,
+      ], { stdio: "inherit" });
+    }
     console.log(`wrote ${out}`);
   }
 } finally {
