@@ -13,7 +13,7 @@ import globals from "globals";
 
 export default defineConfig(
   {
-    ignores: ["**/dist/**", "**/dist-share/**", "**/.wrangler/**", "**/node_modules/**", "docs/**"],
+    ignores: ["**/dist/**", "**/dist-share/**", "**/dist-promo/**", "**/.wrangler/**", "**/node_modules/**", "docs/**"],
   },
 
   js.configs.recommended,
@@ -26,9 +26,9 @@ export default defineConfig(
     },
   },
 
-  // Web app: browser globals, React hooks and accessibility rules.
+  // Web app (and the promo scene): browser globals, React hooks and accessibility rules.
   {
-    files: ["web/src/**/*.{ts,tsx}"],
+    files: ["web/src/**/*.{ts,tsx}", "web/promo/**/*.{ts,tsx}"],
     languageOptions: { globals: { ...globals.browser } },
     plugins: { "react-hooks": reactHooks },
     rules: { ...reactHooks.configs.flat.recommended.rules },
@@ -56,7 +56,7 @@ export default defineConfig(
   },
   {
     // The browser scripts (e2e, history-check) pass callbacks to page.evaluate(), which run in the browser.
-    files: ["scripts/e2e-*.mjs", "scripts/history-check.mjs", "scripts/brand-images.mjs"],
+    files: ["scripts/e2e-*.mjs", "scripts/history-check.mjs", "scripts/brand-images.mjs", "scripts/promo-video.mjs"],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
   {
